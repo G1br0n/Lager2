@@ -390,8 +390,10 @@ fun MonitorView(
     viewModel: MaterialViewModel,
     onMaterialSelected: (Material) -> Unit
 ) {
+    // Gruppiere Materialien nach Bezeichnung und sortiere alphabetisch
     val groupedMaterials = viewModel.materials.groupBy { it.bezeichnung ?: "Unbekannt" }
         .toSortedMap()
+    val columns = groupedMaterials.toList()
 
     Row(
         modifier = Modifier
@@ -399,64 +401,129 @@ fun MonitorView(
             .horizontalScroll(rememberScrollState())
             .padding(8.dp)
     ) {
-        groupedMaterials.forEach { (bezeichnung, materials) ->
+        columns.forEachIndexed { index, (bezeichnung, materials) ->
             Column(
                 modifier = Modifier
                     .padding(8.dp)
                     .fillMaxHeight(),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
-                // Überschrift der Spalte
-                Text(text = bezeichnung, style = MaterialTheme.typography.h6)
-                // Zusammenfassung unter der Überschrift:
-                // Grüne Zahl links (im Lager), Rote Zahl rechts (nicht im Lager)
+                // Spaltenüberschrift in größerer Schrift
+                Text(text = bezeichnung, style = MaterialTheme.typography.h4)
+
+                // Zusammenfassungszeile: Links grün (im Lager), rechts rot (nicht im Lager)
                 val countInLager = materials.count { it.inLager }
                 val countNotInLager = materials.count { !it.inLager }
                 Row(
                     modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.Center
                 ) {
                     Text(
                         text = "$countInLager",
                         color = Color.Green,
-                        style = MaterialTheme.typography.h6
+                        style = MaterialTheme.typography.h4
                     )
                     Text(
                         text = " / ",
-                        style = MaterialTheme.typography.h6
+                        style = MaterialTheme.typography.h4
                     )
                     Text(
                         text = "$countNotInLager",
                         color = Color.Red,
-                        style = MaterialTheme.typography.h6
+                        style = MaterialTheme.typography.h4
                     )
                 }
-                Spacer(modifier = Modifier.height(8.dp))
-                // Sortiere: Materialien im Lager zuerst, danach die anderen
-                val sortedMaterials = materials.sortedByDescending { it.inLager }
-                sortedMaterials.take(10).forEach { material ->
-                    // Entferne nachgestellte Whitespaces (z.B. Zeilenumbrüche) und nimm die letzten 10 Zeichen
-                    val cleanedSerial = material.seriennummer?.trimEnd() ?: ""
-                    val displaySerial = if (cleanedSerial.length > 10) cleanedSerial.takeLast(10) else cleanedSerial
-                    val backgroundColor = if (material.inLager) Color(0xFFB9F6CA) else Color(0xFFFFCDD2)
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(vertical = 4.dp)
-                            .background(backgroundColor)
-                            .clickable { onMaterialSelected(material) },
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Text(
-                            text = displaySerial,
-                            modifier = Modifier.padding(8.dp)
+                Spacer(modifier = Modifier.height(16.dp))
+
+                // Untere Übersicht: Aufteilung in zwei Gruppen – grüne (im Lager) und rote (nicht im Lager)
+                val greenMaterials = materials.filter { it.inLager }
+                val redMaterials = materials.filter { !it.inLager }
+
+                Column {
+                    // Anzeige der grünen Materialien
+                    greenMaterials.forEachIndexed { idx, material ->
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(vertical = 4.dp)
+                                .background(Color(0xFFB9F6CA))
+                                .clickable { onMaterialSelected(material) },
+                            contentAlignment = Alignment.Center
+                        ) {
+                            val cleanedSerial = material.seriennummer?.trimEnd() ?: ""
+                            val displaySerial = if (cleanedSerial.length > 10) cleanedSerial.takeLast(10) else cleanedSerial
+                            Text(
+                                text = displaySerial,
+                                modifier = Modifier.padding(8.dp),
+                                style = MaterialTheme.typography.h5
+                            )
+                        }
+                        if (idx < greenMaterials.size - 1) {
+                            Divider(
+                                modifier = Modifier.fillMaxWidth(),
+                                color = Color.Gray,
+                                thickness = 1.dp
+                            )
+                        }
+                    }
+
+                    // Trennlinie zwischen den Gruppen nur anzeigen, wenn beide Gruppen vorhanden sind
+                    if (greenMaterials.isNotEmpty() && redMaterials.isNotEmpty()) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(4.dp)
+                                .background(Color.Black)
                         )
                     }
+
+                    Divider(
+                        modifier = Modifier.fillMaxWidth(),
+                        color = Color.Gray,
+                        thickness = 1.dp
+                    )
+
+                    // Anzeige der roten Materialien
+                    redMaterials.forEachIndexed { idx, material ->
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(vertical = 4.dp)
+                                .background(Color(0xFFFFCDD2))
+                                .clickable { onMaterialSelected(material) },
+                            contentAlignment = Alignment.Center
+                        ) {
+                            val cleanedSerial = material.seriennummer?.trimEnd() ?: ""
+                            val displaySerial = if (cleanedSerial.length > 10) cleanedSerial.takeLast(10) else cleanedSerial
+                            Text(
+                                text = displaySerial,
+                                modifier = Modifier.padding(8.dp),
+                                style = MaterialTheme.typography.h5
+                            )
+                        }
+
+
+
+                    }
                 }
+            }
+            // Vertikaler Divider zwischen den Spalten
+            if (index < columns.size - 1) {
+                Divider(
+                    modifier = Modifier
+                        .fillMaxHeight()
+                        .width(2.dp),
+                    color = Color.Gray
+                )
             }
         }
     }
 }
+
+
+
+
 
 
 
