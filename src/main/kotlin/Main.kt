@@ -269,7 +269,7 @@ class MaterialViewModel(private val repository: MaterialRepository) {
     }
 
     private fun playSuccessTone() { Thread { playMp3FromResource("/mp3/ok.mp3") }.start() }
-    private fun playErrorTone() { Thread { playMp3FromResource("/mp3/error.mp3") }.start() }
+    fun playErrorTone() { Thread { playMp3FromResource("/mp3/error.mp3") }.start() }
 }
 
 // ----------------------------
@@ -371,7 +371,7 @@ fun MaterialListView(
                     .padding(vertical = 4.dp)
             ) {
                 Text(material.bezeichnung ?: "–", modifier = Modifier.weight(1f))
-                Text(material.seriennummer ?: "–", modifier = Modifier.weight(1f))
+                Text(material.seriennummer?.trimEnd() ?: "", modifier = Modifier.weight(1f))
                 Text(if (material.inLager) "Lager" else "Ausgegeben", modifier = Modifier.weight(1f))
                 Text(material.notiz ?: "–", modifier = Modifier.weight(1f))
             }
@@ -528,60 +528,145 @@ fun MonitorView(
 
 
 
+@OptIn(ExperimentalComposeUiApi::class)
 @Composable
 fun NewMaterialDialog(
     onDismiss: () -> Unit,
-    onSave: (Material) -> Unit
+    onSave: (Material) -> Unit,
+    onCheckSerialExists: (String) -> Boolean,
+    playErrorTone: () -> Unit
 ) {
     var seriennummer by remember { mutableStateOf("") }
     var bezeichnung by remember { mutableStateOf("") }
     var notiz by remember { mutableStateOf("") }
+
+    val createdMaterials = remember { mutableStateListOf<Material>() }
+
+    val focusRequester = remember { FocusRequester() }
+
     Dialog(onCloseRequest = onDismiss) {
         Surface(
             modifier = Modifier.wrapContentSize(),
             shape = MaterialTheme.shapes.medium,
             elevation = 8.dp
         ) {
-            Column(modifier = Modifier.padding(16.dp)) {
-                Text("Neues Material hinzufügen", style = MaterialTheme.typography.h6)
-                Spacer(modifier = Modifier.height(8.dp))
-                TextField(
-                    value = seriennummer,
-                    onValueChange = { seriennummer = it },
-                    label = { Text("Seriennummer") }
-                )
-                TextField(
-                    value = bezeichnung,
-                    onValueChange = { bezeichnung = it },
-                    label = { Text("Bezeichnung") }
-                )
-                TextField(
-                    value = notiz,
-                    onValueChange = { notiz = it },
-                    label = { Text("Notiz") }
-                )
-                Spacer(modifier = Modifier.height(16.dp))
-                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
-                    Button(onClick = onDismiss) { Text("Abbrechen") }
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Button(onClick = {
-                        val newMaterial = Material(
-                            seriennummer = seriennummer,
-                            bezeichnung = bezeichnung,
-                            inLager = true,
-                            notiz = notiz
-                        ).copy(
-                            verlaufLog = listOf(
-                                MaterialLog(LocalDateTime.now(), "System", "Material erstellt")
+            Row(
+                modifier = Modifier
+                    .padding(16.dp)
+                    .wrapContentSize()
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text("Neues Material hinzufügen", style = MaterialTheme.typography.h6)
+                    Spacer(modifier = Modifier.height(8.dp))
+                    TextField(
+                        value = seriennummer,
+                        onValueChange = { seriennummer = it },
+                        label = { Text("Seriennummer") },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .focusRequester(focusRequester)
+                    )
+                    TextField(
+                        value = bezeichnung,
+                        onValueChange = { bezeichnung = it },
+                        label = { Text("Bezeichnung") },
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    TextField(
+                        value = notiz,
+                        onValueChange = { notiz = it },
+                        label = { Text("Notiz") },
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    Spacer(modifier = Modifier.height(16.dp))
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.End
+                    ) {
+                        Button(onClick = onDismiss) { Text("Schließen") }
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Button(onClick = {
+                            val trimmedSerial = seriennummer.trim()
+                            if (trimmedSerial.isBlank()) {
+                                playErrorTone()
+                                seriennummer = ""
+                                focusRequester.requestFocus()
+                                return@Button
+                            }
+
+                            if (onCheckSerialExists(trimmedSerial)) {
+                                playErrorTone()
+                                seriennummer = ""
+
+                                // Füge Hinweis in Verlaufsliste ein (als Fake-Material mit Hinweistext)
+                                val logEntry = Material(
+                                    seriennummer = trimmedSerial,
+                                    bezeichnung = "⚠ Bereits vorhanden",
+                                    inLager = false,
+                                    notiz = null,
+                                    verlaufLog = listOf(
+                                        MaterialLog(LocalDateTime.now(), "System", "Seriennummer bereits in der Liste")
+                                    )
+                                )
+                                createdMaterials.add(logEntry)
+
+                                focusRequester.requestFocus()
+                            } else {
+                                val newMaterial = Material(
+                                    seriennummer = trimmedSerial,
+                                    bezeichnung = bezeichnung,
+                                    inLager = true,
+                                    notiz = notiz
+                                ).copy(
+                                    verlaufLog = listOf(
+                                        MaterialLog(LocalDateTime.now(), "System", "Material erstellt")
+                                    )
+                                )
+                                onSave(newMaterial)
+                                createdMaterials.add(newMaterial)
+
+                                // Nur Seriennummer zurücksetzen – Bezeichnung & Notiz bleiben erhalten
+                                seriennummer = ""
+
+                                // Fokus zurück auf Seriennummer
+                                focusRequester.requestFocus()
+                            }
+
+                        })
+                        { Text("Hinzufügen") }
+                    }
+                }
+
+                Spacer(modifier = Modifier.width(16.dp))
+
+                Column(modifier = Modifier.weight(1f)) {
+                    Text("Zuletzt hinzugefügt", style = MaterialTheme.typography.subtitle1)
+                    Spacer(modifier = Modifier.height(4.dp))
+
+                    LazyColumn {
+                        items(createdMaterials.reversed()) { material ->
+                            val timestamp = material.verlaufLog.firstOrNull()?.timestamp
+                                ?.format(java.time.format.DateTimeFormatter.ofPattern("HH:mm:ss"))
+                                ?: ""
+                            Text(
+                                text = "• ${material.bezeichnung ?: "?"} (${material.seriennummer ?: "-"}) – $timestamp",
+                                style = MaterialTheme.typography.body2,
+                                modifier = Modifier.padding(vertical = 2.dp)
                             )
-                        )
-                        onSave(newMaterial)
-                    }) { Text("Speichern") }
+                        }
+                    }
                 }
             }
         }
+
+        // Initialer Fokus setzen
+        LaunchedEffect(Unit) {
+            focusRequester.requestFocus()
+        }
     }
 }
+
+
 
 @Composable
 fun DetailDialog(
@@ -593,16 +678,22 @@ fun DetailDialog(
     var seriennummer by remember { mutableStateOf(material.seriennummer ?: "") }
     var inLager by remember { mutableStateOf(material.inLager) }
     var notiz by remember { mutableStateOf(material.notiz ?: "") }
+
     Dialog(onCloseRequest = onDismiss) {
         Surface(
             modifier = Modifier.wrapContentSize(),
             shape = MaterialTheme.shapes.medium,
             elevation = 8.dp
         ) {
-            Row(modifier = Modifier.padding(16.dp).wrapContentSize()) {
+            Row(
+                modifier = Modifier
+                    .padding(16.dp)
+                    .wrapContentSize()
+            ) {
                 Column(modifier = Modifier.weight(1f)) {
                     Text("Material Details bearbeiten", style = MaterialTheme.typography.h6)
                     Spacer(modifier = Modifier.height(8.dp))
+
                     TextField(
                         value = bezeichnung,
                         onValueChange = { bezeichnung = it },
@@ -615,6 +706,7 @@ fun DetailDialog(
                         label = { Text("Seriennummer") },
                         modifier = Modifier.fillMaxWidth()
                     )
+
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Checkbox(
                             checked = inLager,
@@ -622,22 +714,28 @@ fun DetailDialog(
                         )
                         Text("Im Lager")
                     }
+
                     TextField(
                         value = notiz,
                         onValueChange = { notiz = it },
                         label = { Text("Notiz") },
                         modifier = Modifier.fillMaxWidth()
                     )
+
                     Spacer(modifier = Modifier.height(16.dp))
-                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.End
+                    ) {
                         Button(onClick = onDismiss) { Text("Abbrechen") }
                         Spacer(modifier = Modifier.width(8.dp))
                         Button(onClick = {
                             val updated = material.copy(
-                                bezeichnung = if (bezeichnung.isNotBlank()) bezeichnung else null,
-                                seriennummer = if (seriennummer.isNotBlank()) seriennummer else null,
+                                bezeichnung = bezeichnung.ifBlank { null },
+                                seriennummer = seriennummer.ifBlank { null },
                                 inLager = inLager,
-                                notiz = if (notiz.isNotBlank()) notiz else null,
+                                notiz = notiz.ifBlank { null },
                                 verlaufLog = material.verlaufLog + MaterialLog(
                                     timestamp = LocalDateTime.now(),
                                     user = "Editor",
@@ -648,17 +746,27 @@ fun DetailDialog(
                         }) { Text("Speichern") }
                     }
                 }
+
                 Spacer(modifier = Modifier.width(16.dp))
+
                 Column(modifier = Modifier.weight(1f)) {
-                    Text("Verlauf:", style = MaterialTheme.typography.subtitle1)
-                    LazyColumn(modifier = Modifier.fillMaxWidth().wrapContentHeight()) {
-                        items(material.verlaufLog) { log ->
-                            Card(modifier = Modifier.padding(4.dp)) {
-                                Column(modifier = Modifier.padding(4.dp)) {
-                                    Text(log.timestamp.toString(), style = MaterialTheme.typography.caption)
-                                    Text(log.event, style = MaterialTheme.typography.body2)
-                                }
-                            }
+                    Text("Verlauf", style = MaterialTheme.typography.subtitle1)
+                    Spacer(modifier = Modifier.height(4.dp))
+
+                    val reversedLogs = material.verlaufLog.reversed()
+
+                    LazyColumn(
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        items(reversedLogs) { log ->
+                            val timeFormatted = log.timestamp.format(
+                                java.time.format.DateTimeFormatter.ofPattern("dd.MM.yyyy HH:mm")
+                            )
+                            Text(
+                                text = "$timeFormatted – ${log.event}",
+                                style = MaterialTheme.typography.body2,
+                                modifier = Modifier.padding(vertical = 2.dp)
+                            )
                         }
                     }
                 }
@@ -666,6 +774,8 @@ fun DetailDialog(
         }
     }
 }
+
+
 
 @Composable
 fun MissingNameDialog(onDismiss: () -> Unit) {
@@ -714,12 +824,14 @@ fun App(viewModel: MaterialViewModel) {
         if (showNewMaterialDialog) {
             NewMaterialDialog(
                 onDismiss = { showNewMaterialDialog = false },
-                onSave = { newMat ->
-                    viewModel.addNewMaterial(newMat)
-                    showNewMaterialDialog = false
-                }
+                onSave = { newMat -> viewModel.addNewMaterial(newMat) },
+                onCheckSerialExists = { serial ->
+                    viewModel.materials.any { it.seriennummer?.trim() == serial.trim() }
+                },
+                playErrorTone = { viewModel.playErrorTone() }
             )
         }
+
         if (showDetailDialog && selectedMaterial != null) {
             DetailDialog(
                 material = selectedMaterial!!,
@@ -730,34 +842,33 @@ fun App(viewModel: MaterialViewModel) {
                 }
             )
         }
+
         if (showMissingNameDialog) {
             MissingNameDialog(onDismiss = { showMissingNameDialog = false })
         }
     }
 }
 
+
 /**
  * In der main-Funktion wird nun ein einziger Repository- und ViewModel-Instanz erzeugt,
  * die in beiden Fenstern (Lagerverwaltung und Monitor) geteilt werden.
  */
 fun main() = application {
-    // Erstelle Repository und ViewModel (SQLite-Persistenz wird genutzt)
     val repository = SQLiteMaterialRepository()
     val viewModel = MaterialViewModel(repository)
 
-    // Hauptfenster für die Lagerverwaltung
     Window(onCloseRequest = ::exitApplication, title = "Lagerverwaltung (MVVM & Grautöne)") {
         App(viewModel)
     }
-    // Zweites Fenster als Übersichtsmonitor
+
     Window(onCloseRequest = {}, title = "Material Monitor") {
-        // Zustand für das im Monitor angeklickte Material
         var selectedMaterialForMonitor by remember { mutableStateOf<Material?>(null) }
-        // MonitorView ruft onMaterialSelected auf, wenn ein Material angeklickt wird.
-        MonitorView(viewModel) { selectedMaterial ->
-            selectedMaterialForMonitor = selectedMaterial
+
+        MonitorView(viewModel) { selected ->
+            selectedMaterialForMonitor = selected
         }
-        // Wird ein Material ausgewählt, öffnet sich der Detaildialog:
+
         if (selectedMaterialForMonitor != null) {
             DetailDialog(
                 material = selectedMaterialForMonitor!!,
@@ -770,4 +881,3 @@ fun main() = application {
         }
     }
 }
-
