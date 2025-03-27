@@ -2,17 +2,15 @@ package views
 
 
 
-import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.*
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material.Divider
 import androidx.compose.material.MaterialTheme
 import androidx.compose.material.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import models.Material
@@ -121,17 +119,18 @@ fun MonitorView(
                     redMaterials.forEachIndexed { idx, material ->
                         Box(
                             modifier = Modifier
-                                .fillMaxWidth()
+                                .width(140.dp) // feste Breite für gleiche Größe
+                                .height(50.dp) // feste Höhe
                                 .padding(vertical = 4.dp)
-                                .background(Color(0xFFFFCDD2))
-                                .clickable { onMaterialSelected(material) },
+                                .clickable { onMaterialSelected(material) }
+                                .background(Color(0xFFFFCDD2), shape = MaterialTheme.shapes.medium)
+                                .border(2.dp, Color.Gray, shape = MaterialTheme.shapes.medium),
                             contentAlignment = Alignment.Center
                         ) {
                             val cleanedSerial = material.seriennummer?.trimEnd() ?: ""
-                            val displaySerial = if (cleanedSerial.length > 10) cleanedSerial.takeLast(10) else cleanedSerial
+                            val displaySerial = if (cleanedSerial.length > 6) cleanedSerial.takeLast(6) else cleanedSerial
                             Text(
                                 text = displaySerial,
-                                modifier = Modifier.padding(8.dp),
                                 style = MaterialTheme.typography.h5
                             )
                         }
