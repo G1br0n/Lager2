@@ -23,18 +23,40 @@ class MaterialViewModel(private val repository: MaterialRepository) {
     var selectedMode by mutableStateOf("Empfang")
     var scannerInput by mutableStateOf("")
     var empfaengerName by mutableStateOf("")
+    var showAlreadyInLagerWarning by mutableStateOf(false)
+    var lastScannedBezeichnung by mutableStateOf<String?>(null)
+    var showPopupWarning by mutableStateOf(false)
+    var popupWarningText by mutableStateOf("")
 
     fun processScan(scannedCode: String) {
         val code = scannedCode.trim()
         val found = materials.find { it.seriennummer?.trim()?.startsWith(code) == true }
+
         if (found != null) {
+            // Fall 1: Empfang & schon im Lager
+            if (selectedMode == "Empfang" && found.inLager) {
+                popupWarningText = "„${found.bezeichnung ?: "Unbekannt"}“ ist bereits im Lager."
+                showPopupWarning = true
+                playErrorTone()
+                return
+            }
+
+            // Fall 2: Ausgabe & nicht im Lager
+            if (selectedMode == "Ausgabe" && !found.inLager) {
+                popupWarningText = "„${found.bezeichnung ?: "Unbekannt"}“ ist nicht im Lager."
+                showPopupWarning = true
+                playErrorTone()
+                return
+            }
+
+            // Normale Verarbeitung
             val updated = when (selectedMode) {
                 "Empfang" -> found.copy(
                     inLager = true,
                     verlaufLog = found.verlaufLog + MaterialLog(
-                        timestamp = LocalDateTime.now(),
+                        timestamp = java.time.LocalDateTime.now(),
                         user = "System",
-                        event = "Material per Scan empfangen"
+                        event = "Material per Scan empfangen von $empfaengerName"
                     )
                 )
                 "Ausgabe" -> {
@@ -42,7 +64,7 @@ class MaterialViewModel(private val repository: MaterialRepository) {
                         found.copy(
                             inLager = false,
                             verlaufLog = found.verlaufLog + MaterialLog(
-                                timestamp = LocalDateTime.now(),
+                                timestamp = java.time.LocalDateTime.now(),
                                 user = "System",
                                 event = "Material per Scan ausgegeben an $empfaengerName"
                             )
@@ -51,13 +73,17 @@ class MaterialViewModel(private val repository: MaterialRepository) {
                 }
                 else -> found
             }
+
             updateMaterial(updated)
             playSuccessTone()
         } else {
-            println("Material mit Seriennummer $scannedCode nicht gefunden!")
+            popupWarningText = "Material mit Seriennummer $code nicht gefunden."
+            showPopupWarning = true
             playErrorTone()
         }
     }
+
+
 
     fun addNewMaterial(material: Material) {
         materials.add(material)
