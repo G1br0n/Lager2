@@ -59,7 +59,7 @@ fun MonitorView(
                 ) {
                     Text(
                         text = "$countInLager",
-                        color = Color.Green,
+                        color = Color.Blue,
                         style = MaterialTheme.typography.h4
                     )
                     Text(
