@@ -66,7 +66,6 @@ fun App(viewModel: MaterialViewModel) {
         Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
             ToolbarView(
                 viewModel = viewModel,
-                onMissingName = { showMissingNameDialog = true },
                 onNewMaterialClick = { showNewMaterialDialog = true }
             )
             Spacer(modifier = Modifier.height(16.dp))

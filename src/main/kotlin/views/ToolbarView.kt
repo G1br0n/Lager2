@@ -1,174 +1,274 @@
 package views
 
-
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.focusable
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.material.*
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.setValue
-
-import androidx.compose.ui.Alignment
+import androidx.compose.runtime.*
 import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.input.key.*
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.window.Dialog
+import kotlinx.coroutines.delay
+import models.MaterialLog
 import viewModels.MaterialViewModel
+import java.time.LocalDateTime
 
 @OptIn(ExperimentalComposeUiApi::class)
+@Composable
+fun ToolbarView(viewModel: MaterialViewModel, onNewMaterialClick: () -> Unit) {
+    var showDialog by remember { mutableStateOf<String?>(null) }
+
+    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+        Button(onClick = {
+            println("ToolbarView: Empfang-Button geklickt")
+            showDialog = "Empfang"
+        }) {
+            Text("Empfang")
+        }
+        Button(onClick = {
+            println("ToolbarView: Ausgabe-Button geklickt")
+            showDialog = "Ausgabe"
+        }) {
+            Text("Ausgabe")
+        }
+        Button(onClick = onNewMaterialClick) {
+            Text("Neu")
+        }
+    }
+
+    showDialog?.let { mode ->
+        ScanDialog(
+            mode = mode,
+            viewModel = viewModel,
+            onDismiss = {
+                println("ToolbarView: Dialog wird geschlossen")
+                showDialog = null
+            }
+        )
+    }
+}
 
 @Composable
-fun ToolbarView(
-    viewModel: MaterialViewModel,
-    onMissingName: () -> Unit,
-    onNewMaterialClick: () -> Unit
-) {
-    val scannerFocusRequester = remember { FocusRequester() }
-    val empfaengerFocusRequester = remember { FocusRequester() }
-
-    var showEmpfaengerDialog by remember { mutableStateOf(false) }
-    var tempEmpfaengerName by remember { mutableStateOf("") }
-
-    LaunchedEffect(Unit) {
-        scannerFocusRequester.requestFocus()
+fun ScanDialog(mode: String, viewModel: MaterialViewModel, onDismiss: () -> Unit) {
+    // Setze den Modus im ViewModel auf den übergebenen Wert,
+    // sodass processScan den korrekten Modus verwendet.
+    LaunchedEffect(mode) {
+        println("ScanDialog: Setting viewModel.selectedMode = $mode")
+        viewModel.selectedMode = mode
     }
 
-    // ----------------------------
-    // Empfängername-Dialog
-    // ----------------------------
-    if (showEmpfaengerDialog) {
-        AlertDialog(
-            onDismissRequest = { showEmpfaengerDialog = false },
-            title = { Text("Empfänger eingeben") },
-            text = {
-                TextField(
-                    value = tempEmpfaengerName,
-                    onValueChange = { tempEmpfaengerName = it },
-                    placeholder = { Text("Name oder Kürzel") },
-                    singleLine = true,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .onPreviewKeyEvent { event ->
-                            if (event.key == Key.Enter && event.type == KeyEventType.KeyUp) {
-                                viewModel.empfaengerName = tempEmpfaengerName.trim()
-                                showEmpfaengerDialog = false
-                                tempEmpfaengerName = ""
-                                scannerFocusRequester.requestFocus()
-                                true
-                            } else false
+    var empfaenger by remember { mutableStateOf(viewModel.empfaengerName) }
+    var abgeberName by remember { mutableStateOf("") }
+    var seriennummer by remember { mutableStateOf("") }
+    var notiz by remember { mutableStateOf("") }
+
+    var showEmpfaengerWarning by remember { mutableStateOf(false) }
+    var showAbgeberWarning by remember { mutableStateOf(false) }
+
+    val focusSerial = remember { FocusRequester() }
+    val focusEmpfaenger = remember { FocusRequester() }
+    val focusAbgeber = remember { FocusRequester() }
+
+    val log = remember { mutableStateListOf<MaterialLog>() }
+
+    Dialog(onCloseRequest = onDismiss) {
+        Surface(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp)
+                .focusable() // Stellt sicher, dass der Dialog den Fokus erhält
+        ) {
+            Row(modifier = Modifier.fillMaxWidth()) {
+                Column(modifier = Modifier.weight(1f)) {
+
+                    if (mode == "Empfang") {
+                        OutlinedTextField(
+                            value = abgeberName,
+                            onValueChange = {
+                                abgeberName = it
+                                showAbgeberWarning = false
+                            },
+                            label = { Text("Abgegeben von") },
+                            singleLine = true,
+                            isError = showAbgeberWarning,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .focusRequester(focusAbgeber)
+                                .onPreviewKeyEvent { keyEvent ->
+                                    println("ScanDialog: Abgegeben-TextField: KeyEvent ${keyEvent.key} ${keyEvent.type}")
+                                    if (keyEvent.key == Key.Enter && keyEvent.type == KeyEventType.KeyUp) {
+                                        if (abgeberName.isBlank()) {
+                                            println("ScanDialog: Abgegeben-TextField: Name ist leer")
+                                            showAbgeberWarning = true
+                                        } else {
+                                            println("ScanDialog: Abgegeben-TextField: Name eingegeben, Fokuswechsel zu Seriennummer")
+                                            focusSerial.requestFocus()
+                                        }
+                                        true
+                                    } else false
+                                }
+                        )
+                        if (showAbgeberWarning) {
+                            Text("Bitte Name der abgebenden Person eingeben.", color = MaterialTheme.colors.error)
                         }
-                )
-            },
-            confirmButton = {
-                TextButton(onClick = {
-                    viewModel.empfaengerName = tempEmpfaengerName.trim()
-                    showEmpfaengerDialog = false
-                    tempEmpfaengerName = ""
-                    scannerFocusRequester.requestFocus()
-                }) {
-                    Text("OK")
+                        Spacer(modifier = Modifier.height(8.dp))
+                    }
+
+                    if (mode == "Ausgabe") {
+                        OutlinedTextField(
+                            value = empfaenger,
+                            onValueChange = {
+                                empfaenger = it
+                                showEmpfaengerWarning = false
+                            },
+                            label = { Text("Empfänger") },
+                            singleLine = true,
+                            isError = showEmpfaengerWarning,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .focusRequester(focusEmpfaenger)
+                                .onPreviewKeyEvent { keyEvent ->
+                                    println("ScanDialog: Empfänger-TextField: KeyEvent ${keyEvent.key} ${keyEvent.type}")
+                                    if (keyEvent.key == Key.Enter && keyEvent.type == KeyEventType.KeyUp) {
+                                        if (empfaenger.isBlank()) {
+                                            println("ScanDialog: Empfänger-TextField: Empfänger ist leer")
+                                            showEmpfaengerWarning = true
+                                        } else {
+                                            println("ScanDialog: Empfänger-TextField: Empfänger eingegeben, Fokuswechsel zu Seriennummer")
+                                            viewModel.empfaengerName = empfaenger
+                                            focusSerial.requestFocus()
+                                        }
+                                        true
+                                    } else false
+                                }
+                        )
+                        if (showEmpfaengerWarning) {
+                            Text("Empfänger darf nicht leer sein.", color = MaterialTheme.colors.error)
+                        }
+                        Spacer(modifier = Modifier.height(8.dp))
+                    }
+
+                    OutlinedTextField(
+                        value = seriennummer,
+                        onValueChange = { seriennummer = it },
+                        label = { Text("Seriennummer") },
+                        singleLine = true,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .focusRequester(focusSerial)
+                            .onPreviewKeyEvent { keyEvent ->
+                                println("ScanDialog: Seriennummer-TextField: KeyEvent ${keyEvent.key} ${keyEvent.type} - aktueller Wert: $seriennummer")
+                                if (keyEvent.key == Key.Enter && keyEvent.type == KeyEventType.KeyUp) {
+                                    if (seriennummer.isNotBlank()) {
+                                        if (mode == "Ausgabe" && empfaenger.isBlank()) {
+                                            println("ScanDialog: Seriennummer: Ausgabe-Modus, aber Empfänger leer")
+                                            showEmpfaengerWarning = true
+                                            focusEmpfaenger.requestFocus()
+                                        } else if (mode == "Empfang" && abgeberName.isBlank()) {
+                                            println("ScanDialog: Seriennummer: Empfang-Modus, aber Abgeber leer")
+                                            showAbgeberWarning = true
+                                            focusAbgeber.requestFocus()
+                                        } else {
+                                            println("ScanDialog: Seriennummer: Verarbeite Scan für $seriennummer")
+                                            viewModel.empfaengerName = empfaenger
+                                            viewModel.processScan(seriennummer) // Kein trim hier!
+                                            log.add(
+                                                MaterialLog(
+                                                    LocalDateTime.now(),
+                                                    if (mode == "Empfang") abgeberName else empfaenger,
+                                                    "Scan $seriennummer verarbeitet ($mode)"
+                                                )
+                                            )
+                                            seriennummer = ""
+                                            focusSerial.requestFocus()
+                                        }
+                                    } else {
+                                        println("ScanDialog: Seriennummer: Enter gedrückt, aber Seriennummer ist leer")
+                                    }
+                                    true
+                                } else false
+                            }
+                    )
+
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    OutlinedTextField(
+                        value = notiz,
+                        onValueChange = { notiz = it },
+                        label = { Text("Notiz") },
+                        modifier = Modifier.fillMaxWidth(),
+                        singleLine = false,
+                        maxLines = 3
+                    )
+
+                    Spacer(modifier = Modifier.height(16.dp))
+
+                    Row(horizontalArrangement = Arrangement.End, modifier = Modifier.fillMaxWidth()) {
+                        Button(onClick = {
+                            println("ScanDialog: PDF-Log anzeigen Button geklickt")
+                            println("PDF-Log anzeigen")
+                        }) {
+                            Text("Verlauf drucken")
+                        }
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Button(onClick = {
+                            println("ScanDialog: $mode beenden Button geklickt")
+                            if (mode == "Ausgabe" && empfaenger.isBlank()) {
+                                println("ScanDialog: Beenden: Ausgabe-Modus, Empfänger ist leer")
+                                showEmpfaengerWarning = true
+                                focusEmpfaenger.requestFocus()
+                            } else if (mode == "Empfang" && abgeberName.isBlank()) {
+                                println("ScanDialog: Beenden: Empfang-Modus, Abgeber ist leer")
+                                showAbgeberWarning = true
+                                focusAbgeber.requestFocus()
+                            } else {
+                                println("ScanDialog: $mode abgeschlossen, Dialog wird geschlossen")
+                                log.add(
+                                    MaterialLog(
+                                        LocalDateTime.now(),
+                                        if (mode == "Empfang") abgeberName else empfaenger,
+                                        "$mode abgeschlossen"
+                                    )
+                                )
+                                onDismiss()
+                            }
+                        }) {
+                            Text("$mode beenden")
+                        }
+                    }
+                }
+
+                Spacer(modifier = Modifier.width(16.dp))
+
+                Column(modifier = Modifier.weight(1f)) {
+                    Text("Verlauf", style = MaterialTheme.typography.subtitle1)
+                    Spacer(modifier = Modifier.height(8.dp))
+                    LazyColumn(modifier = Modifier.fillMaxWidth().height(200.dp)) {
+                        items(log.reversed()) {
+                            Text("${it.timestamp} - ${it.event}", style = MaterialTheme.typography.body2)
+                        }
+                    }
                 }
             }
-        )
-    }
-
-    // ----------------------------
-    // Toolbar UI
-    // ----------------------------
-    Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-        Row(modifier = Modifier.weight(1f)) {
-            TextField(
-                value = viewModel.scannerInput,
-                onValueChange = { viewModel.scannerInput = it },
-                label = { Text("Seriennummer scannen") },
-                modifier = Modifier
-                    .weight(1f)
-                    .focusRequester(scannerFocusRequester)
-                    .onPreviewKeyEvent { keyEvent ->
-                        if (keyEvent.type == KeyEventType.KeyUp && keyEvent.key == Key.Enter) {
-                            if (viewModel.selectedMode == "Ausgabe" && viewModel.empfaengerName.isBlank()) {
-                                onMissingName()
-                                true
-                            } else {
-                                viewModel.processScan(viewModel.scannerInput)
-                                viewModel.scannerInput = ""
-                                scannerFocusRequester.requestFocus()
-                                true
-                            }
-                        } else false
-                    }
-            )
-            Spacer(modifier = Modifier.width(8.dp))
-
-                TextField(
-                    value = viewModel.empfaengerName,
-                    onValueChange = { viewModel.empfaengerName = it },
-                    label = { Text("Empfänger") },
-                    modifier = Modifier
-                        .weight(1f)
-                        .focusRequester(empfaengerFocusRequester)
-                        .onPreviewKeyEvent { keyEvent ->
-                            if (keyEvent.type == KeyEventType.KeyUp && keyEvent.key == Key.Enter) {
-                                scannerFocusRequester.requestFocus()
-                                true
-                            } else false
-                        }
-                )
-
-        }
-
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Text("Modus:", style = MaterialTheme.typography.subtitle1)
-            Spacer(modifier = Modifier.width(8.dp))
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                RadioButton(
-                    selected = (viewModel.selectedMode == "Empfang"),
-                    onClick = {
-                        viewModel.selectedMode = "Empfang"
-                        showEmpfaengerDialog = true
-                    }
-                )
-                Text("Empfang")
-            }
-            Spacer(modifier = Modifier.width(16.dp))
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                RadioButton(
-                    selected = (viewModel.selectedMode == "Ausgabe"),
-                    onClick = {
-                        viewModel.selectedMode = "Ausgabe"
-                        showEmpfaengerDialog = true
-                    }
-                )
-                Text("Ausgabe")
-            }
-            Spacer(modifier = Modifier.width(16.dp))
-            Button(onClick = onNewMaterialClick) {
-                Text("Neu")
-            }
         }
     }
 
-    if (viewModel.showPopupWarning) {
-        AlertDialog(
-            onDismissRequest = { viewModel.showPopupWarning = false },
-            title = { Text("Achtung") },
-            text = { Text(viewModel.popupWarningText) },
-            buttons = {}
-        )
-
-        // Automatisch nach 2 Sekunden schließen
-        LaunchedEffect(Unit) {
-            kotlinx.coroutines.delay(2000)
-            viewModel.showPopupWarning = false
+    LaunchedEffect(Unit) {
+        delay(100)
+        if (mode == "Ausgabe" && empfaenger.isBlank()) {
+            println("ScanDialog: LaunchedEffect: Ausgabe-Modus, Empfänger ist leer -> Fokus auf Empfänger")
+            focusEmpfaenger.requestFocus()
+        } else if (mode == "Empfang" && abgeberName.isBlank()) {
+            println("ScanDialog: LaunchedEffect: Empfang-Modus, Abgeber ist leer -> Fokus auf Abgeber")
+            focusAbgeber.requestFocus()
+        } else {
+            println("ScanDialog: LaunchedEffect: Standardfall -> Fokus auf Seriennummer")
+            focusSerial.requestFocus()
         }
     }
-
 }
