@@ -1,18 +1,22 @@
 package views
 
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.*
 import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.input.key.*
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.*
 import kotlinx.coroutines.delay
 import models.MaterialLog
 import viewModels.MaterialViewModel
@@ -23,36 +27,50 @@ import java.time.LocalDateTime
 fun ToolbarView(viewModel: MaterialViewModel, onNewMaterialClick: () -> Unit) {
     var showDialog by remember { mutableStateOf<String?>(null) }
 
-    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-        Button(onClick = {
-            println("ToolbarView: Empfang-Button geklickt")
-            showDialog = "Empfang"
-        }) {
-            Text("Empfang")
-        }
-        Button(onClick = {
-            println("ToolbarView: Ausgabe-Button geklickt")
-            showDialog = "Ausgabe"
-        }) {
-            Text("Ausgabe")
-        }
-        Button(onClick = onNewMaterialClick) {
-            Text("Neu")
-        }
+    // Starte das Overlay-Fenster, wenn ein Fehler angezeigt werden soll.
+    if (viewModel.showPopupWarning) {
+        ErrorOverlayWindow(
+            errorText = viewModel.popupWarningText,
+            onDismiss = { viewModel.showPopupWarning = false }
+        )
     }
 
-    showDialog?.let { mode ->
-        ScanDialog(
-            mode = mode,
-            viewModel = viewModel,
-            onDismiss = {
-                println("ToolbarView: Dialog wird geschlossen")
-                showDialog = null
+    Column {
+        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+            Button(onClick = {
+                println("ToolbarView: Empfang-Button geklickt")
+                viewModel.selectedMode = "Empfang"
+                showDialog = "Empfang"
+            }) {
+                Text("Empfang")
             }
-        )
+            Button(onClick = {
+                println("ToolbarView: Ausgabe-Button geklickt")
+                viewModel.selectedMode = "Ausgabe"
+                showDialog = "Ausgabe"
+            }) {
+                Text("Ausgabe")
+            }
+            Button(onClick = onNewMaterialClick) {
+                Text("Neu")
+            }
+        }
+
+        showDialog?.let { mode ->
+            ScanDialog(
+                mode = mode,
+                viewModel = viewModel,
+                onDismiss = {
+                    println("ToolbarView: Dialog wird geschlossen")
+                    showDialog = null
+                }
+            )
+        }
     }
 }
 
+
+@OptIn(ExperimentalComposeUiApi::class)
 @Composable
 fun ScanDialog(mode: String, viewModel: MaterialViewModel, onDismiss: () -> Unit) {
     // Setze den Modus im ViewModel auf den übergebenen Wert,
@@ -76,14 +94,22 @@ fun ScanDialog(mode: String, viewModel: MaterialViewModel, onDismiss: () -> Unit
 
     val log = remember { mutableStateListOf<MaterialLog>() }
 
-    Dialog(onCloseRequest = onDismiss) {
+    // Erstelle einen DialogState mit fester Größe
+    val dialogState = rememberDialogState(width = 1200.dp, height = 500.dp)
+
+    // Verwende DialogWindow anstatt Dialog, um die Größe zu erzwingen
+    DialogWindow(
+        onCloseRequest = onDismiss,
+        state = dialogState,
+        title = ""
+    ) {
         Surface(
             modifier = Modifier
-                .fillMaxWidth()
+                .fillMaxSize()
                 .padding(16.dp)
-                .focusable() // Stellt sicher, dass der Dialog den Fokus erhält
+                .focusable()
         ) {
-            Row(modifier = Modifier.fillMaxWidth()) {
+            Row(modifier = Modifier.fillMaxSize()) {
                 Column(modifier = Modifier.weight(1f)) {
 
                     if (mode == "Empfang") {
@@ -176,7 +202,7 @@ fun ScanDialog(mode: String, viewModel: MaterialViewModel, onDismiss: () -> Unit
                                         } else {
                                             println("ScanDialog: Seriennummer: Verarbeite Scan für $seriennummer")
                                             viewModel.empfaengerName = empfaenger
-                                            viewModel.processScan(seriennummer) // Kein trim hier!
+                                            viewModel.processScan(seriennummer)
                                             log.add(
                                                 MaterialLog(
                                                     LocalDateTime.now(),
@@ -269,6 +295,49 @@ fun ScanDialog(mode: String, viewModel: MaterialViewModel, onDismiss: () -> Unit
         } else {
             println("ScanDialog: LaunchedEffect: Standardfall -> Fokus auf Seriennummer")
             focusSerial.requestFocus()
+        }
+    }
+}
+
+
+@Composable
+fun ErrorOverlayWindow(errorText: String, onDismiss: () -> Unit) {
+    val windowState = rememberWindowState(
+        width = 1200.dp,
+        height = 500.dp,
+        position = WindowPosition(Alignment.TopCenter)
+    )
+    // Starte eine einfache Fade-in-Animation
+    var startAnimation by remember { mutableStateOf(false) }
+    val alphaAnim by animateFloatAsState(
+        targetValue = if (startAnimation) 1f else 0f,
+        animationSpec = tween(durationMillis = 500)
+    )
+
+    LaunchedEffect(Unit) {
+        startAnimation = true
+        delay(5000) // 5 Sekunden anzeigen
+        onDismiss()
+    }
+
+    Window(
+        onCloseRequest = onDismiss,
+        title = "",
+        state = windowState,
+        undecorated = true,
+        alwaysOnTop = true
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .alpha(alphaAnim),
+            contentAlignment = Alignment.Center
+        ) {
+            Text(
+                text = errorText,
+                color = MaterialTheme.colors.error,
+                style = MaterialTheme.typography.h3 // Größerer, mutiger Text
+            )
         }
     }
 }
