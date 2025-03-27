@@ -25,14 +25,10 @@ fun DetailDialog(
     var inLager by remember { mutableStateOf(material.inLager) }
     var notiz by remember { mutableStateOf(material.notiz ?: "") }
 
-    Dialog(onCloseRequest = onDismiss) {
-        Surface(
-            modifier = Modifier.wrapContentSize(),
-            shape = MaterialTheme.shapes.medium,
-            elevation = 8.dp
-        ) {
+
             Row(
                 modifier = Modifier
+
                     .padding(16.dp)
                     .wrapContentSize()
             ) {
@@ -76,7 +72,7 @@ fun DetailDialog(
                     ) {
                         Button(onClick = onDismiss) { Text("Abbrechen") }
                         Spacer(modifier = Modifier.width(8.dp))
-                        Button(onClick = {
+                        Button(onClick =  {
                             val updated = material.copy(
                                 bezeichnung = bezeichnung.ifBlank { null },
                                 seriennummer = seriennummer.ifBlank { null },
@@ -118,5 +114,4 @@ fun DetailDialog(
                 }
             }
         }
-    }
-}
+

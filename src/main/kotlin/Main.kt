@@ -21,9 +21,7 @@ import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.key.*
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.window.Dialog
-import androidx.compose.ui.window.Window
-import androidx.compose.ui.window.application
+import androidx.compose.ui.window.*
 import javazoom.jl.player.advanced.AdvancedPlayer
 import models.Material
 import repositorys.SQLiteMaterialRepository
@@ -90,15 +88,24 @@ fun App(viewModel: MaterialViewModel) {
         }
 
         if (showDetailDialog && selectedMaterial != null) {
-            DetailDialog(
-                material = selectedMaterial!!,
-                onDismiss = { showDetailDialog = false },
-                onSave = { updated ->
-                    viewModel.updateMaterial(updated)
-                    showDetailDialog = false
-                }
-            )
+            DialogWindow(
+                onCloseRequest = { showDetailDialog = false },
+                title = "Materialdetails",
+                state = rememberDialogState(width = 1200.dp, height = 450.dp),
+                resizable = true,
+                alwaysOnTop = true
+            ) {
+                DetailDialog(
+                    material = selectedMaterial!!,
+                    onDismiss = { showDetailDialog = false },
+                    onSave = { updated ->
+                        viewModel.updateMaterial(updated)
+                        showDetailDialog = false
+                    }
+                )
+            }
         }
+
 
         if (showMissingNameDialog) {
             MissingNameDialog(onDismiss = { showMissingNameDialog = false })
@@ -114,19 +121,26 @@ fun App(viewModel: MaterialViewModel) {
 fun main() = application {
     val repository = SQLiteMaterialRepository()
     val viewModel = MaterialViewModel(repository)
+    var selectedMaterialForMonitor by remember { mutableStateOf<Material?>(null) }
 
     Window(onCloseRequest = ::exitApplication, title = "Lagerverwaltung (MVVM & Grautöne)") {
         App(viewModel)
     }
 
     Window(onCloseRequest = {}, title = "Material Monitor") {
-        var selectedMaterialForMonitor by remember { mutableStateOf<Material?>(null) }
-
         MonitorView(viewModel) { selected ->
             selectedMaterialForMonitor = selected
         }
+    }
 
-        if (selectedMaterialForMonitor != null) {
+    if (selectedMaterialForMonitor != null) {
+        DialogWindow(
+            onCloseRequest = { selectedMaterialForMonitor = null },
+            title = "Materialdetails",
+            state = rememberDialogState(width = 1200.dp, height = 450.dp),
+            resizable = true,
+            alwaysOnTop = true // <- Damit es im Vordergrund bleibt
+        ) {
             DetailDialog(
                 material = selectedMaterialForMonitor!!,
                 onDismiss = { selectedMaterialForMonitor = null },
@@ -137,4 +151,7 @@ fun main() = application {
             )
         }
     }
+
+
+
 }

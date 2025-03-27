@@ -116,11 +116,6 @@ fun MonitorView(
                         )
                     }
 
-                    Divider(
-                        modifier = Modifier.fillMaxWidth(),
-                        color = Color.Gray,
-                        thickness = 1.dp
-                    )
 
                     // Anzeige der roten Materialien
                     redMaterials.forEachIndexed { idx, material ->
