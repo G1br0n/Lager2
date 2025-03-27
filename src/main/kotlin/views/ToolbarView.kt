@@ -10,8 +10,10 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.setValue
+
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
@@ -42,12 +44,7 @@ fun ToolbarView(
     // ----------------------------
     // Empfängername-Dialog
     // ----------------------------
-    // ----------------------------
-    // Empfängername-Dialog mit Fokus
-    // ----------------------------
     if (showEmpfaengerDialog) {
-        val dialogFocusRequester = remember { FocusRequester() }
-
         AlertDialog(
             onDismissRequest = { showEmpfaengerDialog = false },
             title = { Text("Empfänger eingeben") },
@@ -59,7 +56,6 @@ fun ToolbarView(
                     singleLine = true,
                     modifier = Modifier
                         .fillMaxWidth()
-                        .focusRequester(dialogFocusRequester)
                         .onPreviewKeyEvent { event ->
                             if (event.key == Key.Enter && event.type == KeyEventType.KeyUp) {
                                 viewModel.empfaengerName = tempEmpfaengerName.trim()
@@ -82,13 +78,7 @@ fun ToolbarView(
                 }
             }
         )
-
-        // Setzt den Fokus beim Öffnen des Dialogs
-        LaunchedEffect(Unit) {
-            dialogFocusRequester.requestFocus()
-        }
     }
-
 
     // ----------------------------
     // Toolbar UI
