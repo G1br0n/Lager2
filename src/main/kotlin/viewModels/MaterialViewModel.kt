@@ -35,7 +35,7 @@ class MaterialViewModel(private val repository: MaterialRepository) {
         if (found != null) {
             // Fall 1: Empfang & schon im Lager
             if (selectedMode == "Empfang" && found.inLager) {
-                popupWarningText = "\u201e${found.bezeichnung ?: "Unbekannt"}\u201c ist bereits im Lager."
+                popupWarningText = "„${found.bezeichnung ?: "Unbekannt"}“ im Lager. \n Materiel Empfangen"
                 showPopupWarning = true
                 playErrorTone()
                 return null
@@ -43,16 +43,16 @@ class MaterialViewModel(private val repository: MaterialRepository) {
 
             // Fall 2: Ausgabe & nicht im Lager
             if (selectedMode == "Ausgabe" && !found.inLager) {
-                popupWarningText = "\u201e${found.bezeichnung ?: "Unbekannt"}\u201c ist nicht im Lager."
+                popupWarningText = "„${found.bezeichnung ?: "Unbekannt"}“ NICHT im Lager."
                 showPopupWarning = true
                 playErrorTone()
                 return null
             }
 
-            // Normale Verarbeitung
             val updated = when (selectedMode) {
                 "Empfang" -> found.copy(
                     inLager = true,
+                    position = "Lager",
                     verlaufLog = found.verlaufLog + MaterialLog(
                         timestamp = LocalDateTime.now(),
                         user = "System",
@@ -63,6 +63,7 @@ class MaterialViewModel(private val repository: MaterialRepository) {
                     if (empfaengerName.isNotBlank()) {
                         found.copy(
                             inLager = false,
+                            position = empfaengerName,
                             verlaufLog = found.verlaufLog + MaterialLog(
                                 timestamp = LocalDateTime.now(),
                                 user = "System",
@@ -85,6 +86,7 @@ class MaterialViewModel(private val repository: MaterialRepository) {
         }
     }
 
+
     fun getMaterialNameBySerial(serial: String): String {
         val cleanedSerial = serial.trim()
         return materials
@@ -102,6 +104,18 @@ class MaterialViewModel(private val repository: MaterialRepository) {
         if (index >= 0) {
             materials[index] = updated
             repository.updateMaterial(updated)
+        }
+    }
+
+    fun updatePosition(serial: String, newPosition: String) {
+        val material = materials.find { it.seriennummer?.trim()?.startsWith(serial.trim()) == true }
+        if (material != null) {
+            val updated = material.copy(position = newPosition)
+            updateMaterial(updated)
+        } else {
+            popupWarningText = "Material mit Seriennummer $serial nicht gefunden."
+            showPopupWarning = true
+            playErrorTone()
         }
     }
 
