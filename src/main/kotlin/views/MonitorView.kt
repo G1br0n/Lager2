@@ -12,10 +12,13 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.times
+import androidx.compose.ui.window.Dialog
 import models.Material
 import viewModels.MaterialViewModel
-
 @Composable
 fun MonitorView(
     viewModel: MaterialViewModel,
@@ -26,6 +29,8 @@ fun MonitorView(
         .groupBy { it.bezeichnung ?: "Unbekannt" }
         .toSortedMap()
 
+    val allBezeichnungen = groupedByBezeichnung.keys.toList()
+
     val allPositions = ausgegebeneMaterials.mapNotNull { it.position }.distinct().sorted()
     val positionColors = remember(allPositions) { generatePositionColors(allPositions) }
 
@@ -33,15 +38,76 @@ fun MonitorView(
     val red = Color(0xFFD32F2F)
     val blue = Color(0xFF1976D2)
 
+    // State: ausgewählte Bezeichnungen (in Reihenfolge des Klick
+    val selectedBezeichnungenState = remember(allBezeichnungen) {
+        mutableStateOf(allBezeichnungen)
+    }
+    val selectedBezeichnungen = selectedBezeichnungenState.value
+
+    var selectedPositionForDialog by remember { mutableStateOf<String?>(null) }
+
     Row(
         modifier = Modifier
             .fillMaxSize()
             .padding(4.dp)
     ) {
+        // Linke Checkbox-Spalte
+        // Linke Checkbox-Spalte
+        Column(
+            modifier = Modifier
+                .padding(end = 4.dp,start = 1.dp)
+                .fillMaxHeight()
+                .width(200.dp)
+                .verticalScroll(rememberScrollState()),
+            horizontalAlignment = Alignment.Start
+        ) {
+
+            allBezeichnungen.forEach { bezeichnung ->
+                val isSelected = selectedBezeichnungen.contains(bezeichnung)
+
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 1.dp, vertical = 2.dp)
+                ) {
+                    Text(
+                        text = bezeichnung,
+                        modifier = Modifier
+                            .weight(1f)
+                            .padding(end = 4.dp),
+                        style = MaterialTheme.typography.body1,
+                        textAlign = TextAlign.End
+                    )
+                    Checkbox(
+                        checked = isSelected,
+                        onCheckedChange = { checked ->
+                            selectedBezeichnungenState.value = if (checked) {
+                                selectedBezeichnungen + bezeichnung
+                            } else {
+                                selectedBezeichnungen - bezeichnung
+                            }
+
+                        },
+                        colors = CheckboxDefaults.colors(
+                            checkedColor = Color.Black
+                        )
+                    )
+
+                }
+
+            }
+        }
+
+
+        // Mittlere Anzeige-Spalten (LazyRow), nur für ausgewählte Bezeichnungen
         LazyRow(modifier = Modifier.weight(1f)) {
-            val bezeichnungList = groupedByBezeichnung.toList()
-            items(bezeichnungList.size) { columnIndex ->
-                val (bezeichnung, materials) = bezeichnungList[columnIndex]
+            val selectedGroups = selectedBezeichnungen.mapNotNull { bezeichnung ->
+                groupedByBezeichnung[bezeichnung]?.let { bezeichnung to it }
+            }
+
+            items(selectedGroups.size) { index ->
+                val (bezeichnung, materials) = selectedGroups[index]
 
                 val inLagerCount = materials.count { it.inLager }
                 val notInLagerCount = materials.count { !it.inLager }
@@ -58,8 +124,7 @@ fun MonitorView(
                     item {
                         Text(
                             text = bezeichnung,
-                            style = MaterialTheme.typography.h5,
-                            modifier = Modifier.align(Alignment.Top)
+                            style = MaterialTheme.typography.h5
                         )
 
                         Spacer(modifier = Modifier.height(2.dp))
@@ -75,7 +140,9 @@ fun MonitorView(
                         Spacer(modifier = Modifier.height(4.dp))
                     }
 
-                    val groupedByPosition = materials.filter { !it.inLager }.groupBy { it.position ?: "Unbekannt" }
+                    val groupedByPosition = materials.filter { !it.inLager }
+                        .groupBy { it.position ?: "Unbekannt" }
+
                     groupedByPosition.forEach { (position, posMaterials) ->
                         item {
                             val positionColor = positionColors[position] ?: Color.LightGray
@@ -104,7 +171,8 @@ fun MonitorView(
                     }
                 }
 
-                if (columnIndex < bezeichnungList.size - 1) {
+                // Vertikale Trennlinie zwischen Spalten
+                if (index < selectedGroups.size - 1) {
                     this@LazyRow.item {
                         Spacer(
                             modifier = Modifier
@@ -117,10 +185,16 @@ fun MonitorView(
             }
         }
 
+
         // Rechte Zusatzspalte: Positionen als Buttons mit Farben
+        val longestPositionText = allPositions.maxByOrNull { it.length } ?: ""
+        val textLengthInDp = longestPositionText.length * 11// ca. 9.dp pro Zeichen bei Buttons
+        val buttonWidth = textLengthInDp.dp + 32.dp // etwas Padding dazu
+
+
         Column(
             modifier = Modifier
-                .padding(start = 2.dp, top = 4.dp, bottom = 4.dp, end = 2.dp)
+                .padding(start = 4.dp)
                 .fillMaxHeight(),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
@@ -129,16 +203,82 @@ fun MonitorView(
             allPositions.forEach { position ->
                 val color = positionColors[position] ?: Color.LightGray
                 Button(
-                    onClick = {},
+                    onClick = { selectedPositionForDialog = position },
                     colors = ButtonDefaults.buttonColors(backgroundColor = color),
-                    modifier = Modifier.padding(horizontal = 2.dp, vertical = 1.dp)
+                    modifier = Modifier
+                        .padding(horizontal = 2.dp, vertical = 1.dp)
+                        .width(buttonWidth as Dp)
                 ) {
                     Text(position, color = Color.Black)
                 }
             }
         }
+
+
+        if (selectedPositionForDialog != null) {
+            Dialog(onDismissRequest = { selectedPositionForDialog = null }) {
+                Surface(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(16.dp),
+                    shape = MaterialTheme.shapes.medium,
+                    color = MaterialTheme.colors.background,
+                    elevation = 8.dp
+                ) {
+                    Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text(
+                                "Materialien bei: ${selectedPositionForDialog}",
+                                style = MaterialTheme.typography.h5,
+                                modifier = Modifier.weight(1f)
+                            )
+                            Button(onClick = { selectedPositionForDialog = null }) {
+                                Text("Schließen")
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.height(8.dp))
+
+                        val items = ausgegebeneMaterials
+                            .filter { it.position == selectedPositionForDialog }
+
+                        LazyColumn(
+                            modifier = Modifier.fillMaxSize()
+                        ) {
+                            items(items) { material ->
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(vertical = 6.dp)
+                                        .border(1.dp, Color.LightGray)
+                                        .padding(horizontal = 8.dp, vertical = 4.dp),
+                                    horizontalArrangement = Arrangement.SpaceBetween
+                                ) {
+                                    Text(
+                                        material.bezeichnung ?: "Unbekannt",
+                                        style = MaterialTheme.typography.body1,
+                                        modifier = Modifier.weight(1f)
+                                    )
+                                    Text(
+                                        material.seriennummer ?: "-",
+                                        style = MaterialTheme.typography.body2
+                                    )
+                                }
+                            }
+
+                        }
+                    }
+                }
+            }
+        }
+
+
     }
 }
+
 
 @Composable
 fun MaterialBox(material: Material, color: Color, onClick: (Material) -> Unit) {
@@ -147,9 +287,9 @@ fun MaterialBox(material: Material, color: Color, onClick: (Material) -> Unit) {
 
     Box(
         modifier = Modifier
-            .width(140.dp)
+            .fillMaxWidth()
             .height(50.dp)
-            .padding(vertical = 2.dp)
+            .padding(horizontal = 3.dp, vertical = 2.dp)
             .clickable { onClick(material) }
             .background(color, shape = MaterialTheme.shapes.medium)
             .border(2.dp, Color.Gray, shape = MaterialTheme.shapes.medium),
@@ -157,6 +297,7 @@ fun MaterialBox(material: Material, color: Color, onClick: (Material) -> Unit) {
     ) {
         Text(displaySerial, style = MaterialTheme.typography.h5)
     }
+
 }
 
 fun generatePositionColors(positions: List<String>): Map<String, Color> {
