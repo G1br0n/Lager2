@@ -14,53 +14,82 @@ import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.input.key.*
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.*
 import kotlinx.coroutines.delay
 import viewModels.MaterialViewModel
 
-
-
 @Composable
 fun ToolbarView(viewModel: MaterialViewModel, onNewMaterialClick: () -> Unit) {
     var showDialog by remember { mutableStateOf<String?>(null) }
+    var showPasswordDialog by remember { mutableStateOf(false) }
 
     Row(
-        modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp),
+        modifier = Modifier.fillMaxWidth().padding(vertical = 12.dp),
+        verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.SpaceBetween
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Button(onClick = {
-                viewModel.selectedMode = "Empfang"
-                showDialog = "Empfang"
-            }) { Text("Empfang") }
+            Button(
+                onClick = {
+                    viewModel.selectedMode = "Empfang"
+                    showDialog = "Empfang"
+                },
+                modifier = Modifier.height(48.dp).padding(horizontal = 4.dp)
+            ) {
+                Text("Empfang", fontSize = 18.sp, fontWeight = FontWeight.Bold)
+            }
 
-            Spacer(modifier = Modifier.width(8.dp))
+            Spacer(modifier = Modifier.width(12.dp))
 
-            Button(onClick = {
-                viewModel.selectedMode = "Ausgabe"
-                showDialog = "Ausgabe"
-            }) { Text("Ausgabe") }
-        }
-
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            OutlinedTextField(
-                value = viewModel.filterText,
-                onValueChange = { viewModel.filterText = it },
-                label = { Text("Filter") },
-                modifier = Modifier.width(250.dp)
-            )
-            Spacer(modifier = Modifier.width(8.dp))
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Checkbox(
-                    checked = viewModel.filterActive,
-                    onCheckedChange = { viewModel.filterActive = it }
-                )
-                Text("Filter an")
+            Button(
+                onClick = {
+                    viewModel.selectedMode = "Ausgabe"
+                    showDialog = "Ausgabe"
+                },
+                modifier = Modifier.height(48.dp).padding(horizontal = 4.dp)
+            ) {
+                Text("Ausgabe", fontSize = 18.sp, fontWeight = FontWeight.Bold)
             }
         }
 
-        Button(onClick = onNewMaterialClick) { Text("Neu") }
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier.weight(1f).padding(horizontal = 16.dp)
+        ) {
+            OutlinedTextField(
+                value = viewModel.filterText,
+                onValueChange = { viewModel.filterText = it },
+                label = { Text("Filter", fontSize = 16.sp) },
+                modifier = Modifier.weight(1f)
+            )
+            Spacer(modifier = Modifier.width(12.dp))
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.wrapContentWidth()
+            ) {
+                Checkbox(
+                    checked = viewModel.filterActive,
+                    onCheckedChange = {
+                        viewModel.filterActive = it
+                    }
+                )
+                Spacer(modifier = Modifier.width(4.dp))
+                Text(
+                    if (viewModel.filterActive) "Filter AN" else "Filter AUS",
+                    fontSize = 16.sp
+                )
+            }
+        }
+
+        Button(
+            onClick = { showPasswordDialog = true },
+            modifier = Modifier.height(48.dp).padding(horizontal = 4.dp)
+        ) {
+            Text("Neu", fontSize = 18.sp, fontWeight = FontWeight.Bold)
+        }
     }
 
     showDialog?.let { mode ->
@@ -70,7 +99,21 @@ fun ToolbarView(viewModel: MaterialViewModel, onNewMaterialClick: () -> Unit) {
             onDismiss = { showDialog = null }
         )
     }
+
+    if (showPasswordDialog) {
+        PasswordPrompt(
+            onConfirm = {
+                if (it == "test") {
+                    onNewMaterialClick()
+                }
+                showPasswordDialog = false
+            },
+            onCancel = { showPasswordDialog = false }
+        )
+    }
 }
+
+
 
 
 @OptIn(ExperimentalComposeUiApi::class)
