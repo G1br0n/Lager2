@@ -27,6 +27,19 @@ class MaterialViewModel(private val repository: MaterialRepository) {
     var lastScannedBezeichnung by mutableStateOf<String?>(null)
     var showPopupWarning by mutableStateOf(false)
     var popupWarningText by mutableStateOf("")
+    var filterText by mutableStateOf("")
+    var filterActive by mutableStateOf(false)
+
+    val filteredMaterials: List<Material>
+        get() = if (!filterActive || filterText.isBlank()) {
+            materials
+        } else {
+            materials.filter {
+                it.bezeichnung?.contains(filterText, ignoreCase = true) == true ||
+                        it.seriennummer?.contains(filterText, ignoreCase = true) == true ||
+                        it.position?.contains(filterText, ignoreCase = true) == true
+            }
+        }
 
     fun processScan(scannedCode: String): String? {
         val code = scannedCode.trim()

@@ -19,46 +19,59 @@ import androidx.compose.ui.window.*
 import kotlinx.coroutines.delay
 import viewModels.MaterialViewModel
 
-@OptIn(ExperimentalComposeUiApi::class)
+
+
 @Composable
 fun ToolbarView(viewModel: MaterialViewModel, onNewMaterialClick: () -> Unit) {
     var showDialog by remember { mutableStateOf<String?>(null) }
 
-    if (viewModel.showPopupWarning) {
-        ErrorOverlayWindow(
-            errorText = viewModel.popupWarningText,
-            onDismiss = { viewModel.showPopupWarning = false }
-        )
-    }
-
-    Column {
-        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+    Row(
+        modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp),
+        horizontalArrangement = Arrangement.SpaceBetween
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
             Button(onClick = {
                 viewModel.selectedMode = "Empfang"
                 showDialog = "Empfang"
-            }) {
-                Text("Empfang")
-            }
+            }) { Text("Empfang") }
+
+            Spacer(modifier = Modifier.width(8.dp))
+
             Button(onClick = {
                 viewModel.selectedMode = "Ausgabe"
                 showDialog = "Ausgabe"
-            }) {
-                Text("Ausgabe")
-            }
-            Button(onClick = onNewMaterialClick) {
-                Text("Neu")
+            }) { Text("Ausgabe") }
+        }
+
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            OutlinedTextField(
+                value = viewModel.filterText,
+                onValueChange = { viewModel.filterText = it },
+                label = { Text("Filter") },
+                modifier = Modifier.width(250.dp)
+            )
+            Spacer(modifier = Modifier.width(8.dp))
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Checkbox(
+                    checked = viewModel.filterActive,
+                    onCheckedChange = { viewModel.filterActive = it }
+                )
+                Text("Filter an")
             }
         }
 
-        showDialog?.let { mode ->
-            ScanDialog(
-                mode = mode,
-                viewModel = viewModel,
-                onDismiss = { showDialog = null }
-            )
-        }
+        Button(onClick = onNewMaterialClick) { Text("Neu") }
+    }
+
+    showDialog?.let { mode ->
+        ScanDialog(
+            mode = mode,
+            viewModel = viewModel,
+            onDismiss = { showDialog = null }
+        )
     }
 }
+
 
 @OptIn(ExperimentalComposeUiApi::class)
 @Composable

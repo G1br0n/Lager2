@@ -24,7 +24,7 @@ fun MaterialListView(
     onMaterialSelected: (Material) -> Unit
 ) {
     LazyColumn(modifier = Modifier.fillMaxSize()) {
-        items(viewModel.materials) { material ->
+        items(viewModel.filteredMaterials) { material ->
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
