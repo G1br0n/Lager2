@@ -32,20 +32,11 @@ import java.sql.DriverManager
 import java.time.LocalDateTime
 import java.util.UUID
 
-
-
-
-
-
-
-
-
 @OptIn(ExperimentalComposeUiApi::class)
 @Composable
 @Preview
 fun App(viewModel: MaterialViewModel) {
-
-     val GrayColorPalette = lightColors(
+    val GrayColorPalette = lightColors(
         primary = Color(0xFF616161),
         primaryVariant = Color(0xFF424242),
         secondary = Color(0xFF9E9E9E),
@@ -61,6 +52,8 @@ fun App(viewModel: MaterialViewModel) {
     var showDetailDialog by remember { mutableStateOf(false) }
     var selectedMaterial by remember { mutableStateOf<Material?>(null) }
     var showMissingNameDialog by remember { mutableStateOf(false) }
+
+    val selected = selectedMaterial // ✅ Kopie gegen null während Recomposition
 
     MaterialTheme(colors = GrayColorPalette) {
         Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
@@ -86,7 +79,7 @@ fun App(viewModel: MaterialViewModel) {
             )
         }
 
-        if (showDetailDialog && selectedMaterial != null) {
+        if (showDetailDialog && selected != null) {
             DialogWindow(
                 onCloseRequest = { showDetailDialog = false },
                 title = "Materialdetails",
@@ -95,23 +88,22 @@ fun App(viewModel: MaterialViewModel) {
                 alwaysOnTop = true
             ) {
                 DetailDialog(
-                    material = selectedMaterial!!,
+                    material = selected,
                     onDismiss = { showDetailDialog = false },
                     onSave = { updated ->
                         viewModel.updateMaterial(updated)
                         showDetailDialog = false
-                    }
+                    },
+                    readOnly = false
                 )
             }
         }
-
 
         if (showMissingNameDialog) {
             MissingNameDialog(onDismiss = { showMissingNameDialog = false })
         }
     }
 }
-
 
 /**
  * In der main-Funktion wird nun ein einziger Repository- und ViewModel-Instanz erzeugt,
@@ -120,7 +112,9 @@ fun App(viewModel: MaterialViewModel) {
 fun main() = application {
     val repository = SQLiteMaterialRepository()
     val viewModel = MaterialViewModel(repository)
+
     var selectedMaterialForMonitor by remember { mutableStateOf<Material?>(null) }
+    val selectedMonitor = selectedMaterialForMonitor // ✅ Schutz für Compose-Update
 
     Window(onCloseRequest = ::exitApplication, title = "Lagerverwaltung (MVVM & Grautöne)") {
         App(viewModel)
@@ -132,25 +126,23 @@ fun main() = application {
         }
     }
 
-    if (selectedMaterialForMonitor != null) {
+    if (selectedMonitor != null) {
         DialogWindow(
             onCloseRequest = { selectedMaterialForMonitor = null },
             title = "Materialdetails",
             state = rememberDialogState(width = 1200.dp, height = 450.dp),
             resizable = true,
-            alwaysOnTop = true // <- Damit es im Vordergrund bleibt
+            alwaysOnTop = true
         ) {
             DetailDialog(
-                material = selectedMaterialForMonitor!!,
+                material = selectedMonitor,
                 onDismiss = { selectedMaterialForMonitor = null },
                 onSave = { updated ->
                     viewModel.updateMaterial(updated)
                     selectedMaterialForMonitor = null
-                }
+                },
+                readOnly = true
             )
         }
     }
-
-
-
 }

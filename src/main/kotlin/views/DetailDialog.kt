@@ -1,6 +1,5 @@
 package views
 
-
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -17,9 +16,10 @@ import java.time.LocalDateTime
 fun DetailDialog(
     material: Material,
     onDismiss: () -> Unit,
-    onSave: (Material) -> Unit
+    onSave: (Material) -> Unit,
+    readOnly: Boolean = false // 🟢 Jetzt steuerbar!
 ) {
-    var showEditMode by remember { mutableStateOf(false) }
+    var showEditMode by remember { mutableStateOf(!readOnly) }
     var showPasswordDialog by remember { mutableStateOf(false) }
 
     if (showPasswordDialog) {
@@ -30,7 +30,6 @@ fun DetailDialog(
                     showPasswordDialog = false
                 } else {
                     showPasswordDialog = false
-                    // Fehlerfeedback könnte ergänzt werden
                 }
             },
             onCancel = { showPasswordDialog = false }
