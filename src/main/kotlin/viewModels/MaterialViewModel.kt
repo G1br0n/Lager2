@@ -92,7 +92,6 @@ class MaterialViewModel(private val repository: MaterialRepository) {
             ?.bezeichnung ?: "Unbekanntes Material"
     }
 
-
     fun addNewMaterial(material: Material) {
         materials.add(material)
         repository.addMaterial(material)

@@ -12,6 +12,7 @@ data class Material(
     val bezeichnung: String? = null,
     val inLager: Boolean,
     val notiz: String? = null,
+    val position: String? = null,
     val verlaufLog: List<MaterialLog> = emptyList()
 )
 

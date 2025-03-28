@@ -8,9 +8,6 @@ import java.sql.DriverManager
 import java.time.LocalDateTime
 import java.util.*
 
-
-
-
 // ----------------------------
 // Repository und Persistenz
 // ----------------------------
@@ -19,8 +16,6 @@ interface MaterialRepository {
     fun addMaterial(material: Material)
     fun updateMaterial(material: Material)
 }
-
-
 
 /**
  * SQLite-Implementierung des MaterialRepository.
@@ -31,11 +26,10 @@ interface MaterialRepository {
 class SQLiteMaterialRepository : MaterialRepository {
     private val connection: Connection
 
-
-
     init {
         // Verbindung zur SQLite-Datenbank (Datei "materials.db")
         connection = DriverManager.getConnection("jdbc:sqlite:materials.db")
+
         // Erstelle Tabellen, falls sie noch nicht existieren:
         val createMaterialsTable = """
             CREATE TABLE IF NOT EXISTS materials (
@@ -43,9 +37,11 @@ class SQLiteMaterialRepository : MaterialRepository {
                 seriennummer TEXT,
                 bezeichnung TEXT,
                 inLager INTEGER,
-                notiz TEXT
+                notiz TEXT,
+                position TEXT
             );
         """.trimIndent()
+
         val createMaterialLogTable = """
             CREATE TABLE IF NOT EXISTS material_log (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -55,9 +51,18 @@ class SQLiteMaterialRepository : MaterialRepository {
                 event TEXT
             );
         """.trimIndent()
+
         connection.createStatement().use { stmt ->
             stmt.execute(createMaterialsTable)
             stmt.execute(createMaterialLogTable)
+        }
+
+        // Führe Migration durch, falls Spalte "position" noch nicht existiert
+        val meta = connection.metaData.getColumns(null, null, "materials", "position")
+        if (!meta.next()) {
+            connection.createStatement().use { stmt ->
+                stmt.execute("ALTER TABLE materials ADD COLUMN position TEXT")
+            }
         }
     }
 
@@ -72,6 +77,8 @@ class SQLiteMaterialRepository : MaterialRepository {
                 val bezeichnung = rs.getString("bezeichnung")
                 val inLager = rs.getInt("inLager") != 0
                 val notiz = rs.getString("notiz")
+                val position = try { rs.getString("position") } catch (e: Exception) { null }
+
                 // Lese zugehörige Logs
                 val logs = mutableListOf<MaterialLog>()
                 val logQuery = "SELECT * FROM material_log WHERE material_id = ? ORDER BY timestamp ASC"
@@ -85,20 +92,22 @@ class SQLiteMaterialRepository : MaterialRepository {
                         logs.add(MaterialLog(timestamp, user, event))
                     }
                 }
-                materials.add(Material(id, seriennummer, bezeichnung, inLager, notiz, logs))
+
+                materials.add(Material(id, seriennummer, bezeichnung, inLager, notiz, position, logs))
             }
         }
         return materials
     }
 
     override fun addMaterial(material: Material) {
-        val insertMaterial = "INSERT INTO materials (id, seriennummer, bezeichnung, inLager, notiz) VALUES (?, ?, ?, ?, ?)"
+        val insertMaterial = "INSERT INTO materials (id, seriennummer, bezeichnung, inLager, notiz, position) VALUES (?, ?, ?, ?, ?, ?)"
         connection.prepareStatement(insertMaterial).use { stmt ->
             stmt.setString(1, material.id.toString())
             stmt.setString(2, material.seriennummer)
             stmt.setString(3, material.bezeichnung)
             stmt.setInt(4, if (material.inLager) 1 else 0)
             stmt.setString(5, material.notiz)
+            stmt.setString(6, material.position)
             stmt.executeUpdate()
         }
         // Füge die Log-Einträge hinzu
@@ -116,13 +125,14 @@ class SQLiteMaterialRepository : MaterialRepository {
     }
 
     override fun updateMaterial(material: Material) {
-        val updateMaterial = "UPDATE materials SET seriennummer = ?, bezeichnung = ?, inLager = ?, notiz = ? WHERE id = ?"
+        val updateMaterial = "UPDATE materials SET seriennummer = ?, bezeichnung = ?, inLager = ?, notiz = ?, position = ? WHERE id = ?"
         connection.prepareStatement(updateMaterial).use { stmt ->
             stmt.setString(1, material.seriennummer)
             stmt.setString(2, material.bezeichnung)
             stmt.setInt(3, if (material.inLager) 1 else 0)
             stmt.setString(4, material.notiz)
-            stmt.setString(5, material.id.toString())
+            stmt.setString(5, material.position)
+            stmt.setString(6, material.id.toString())
             stmt.executeUpdate()
         }
         // Alte Logs löschen und alle neuen Logs einfügen
@@ -144,6 +154,3 @@ class SQLiteMaterialRepository : MaterialRepository {
         }
     }
 }
-
-
-
