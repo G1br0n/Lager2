@@ -172,7 +172,15 @@ fun generatePositionColors(positions: List<String>): Map<String, Color> {
         Color(0xFFF0F4C3), Color(0xFFFFE0B2), Color(0xFFF8BBD0), Color(0xFFE1BEE7)
     ).shuffled()
 
+    val specialRed = Color(0xFFD32F2F) // Klarer Rotton für spezielle Positionen
+
     return positions.mapIndexed { index, pos ->
-        pos to colors[index % colors.size]
+        val lower = pos.lowercase()
+        val color = if (lower == "zöllner" || lower == "reparatur") {
+            specialRed
+        } else {
+            colors[index % colors.size]
+        }
+        pos to color
     }.toMap()
 }
