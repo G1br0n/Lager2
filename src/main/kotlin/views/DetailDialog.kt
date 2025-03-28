@@ -17,7 +17,7 @@ fun DetailDialog(
     material: Material,
     onDismiss: () -> Unit,
     onSave: (Material) -> Unit,
-    readOnly: Boolean = false // 🟢 Jetzt steuerbar!
+    readOnly: Boolean = false
 ) {
     var showEditMode by remember { mutableStateOf(!readOnly) }
     var showPasswordDialog by remember { mutableStateOf(false) }
@@ -124,11 +124,19 @@ fun DetailContent(
                     Button(onClick = {
                         val changes = mutableListOf<String>()
 
-                        if (material.bezeichnung != bezeichnung) changes += "Bezeichnung geändert"
-                        if (material.seriennummer != seriennummer) changes += "Seriennummer geändert"
-                        if (material.position != position) changes += "Position geändert"
-                        if (material.inLager != inLager) changes += if (inLager) "ins Lager gelegt" else "aus Lager entfernt"
-                        if (material.notiz != notiz) {
+                        if ((material.bezeichnung ?: "").trim() != bezeichnung.trim())
+                            changes += "Bezeichnung geändert"
+
+                        if ((material.seriennummer ?: "").trim() != seriennummer.trim())
+                            changes += "Seriennummer geändert"
+
+                        if ((material.position ?: "").trim() != position.trim())
+                            changes += "Position geändert"
+
+                        if (material.inLager != inLager)
+                            changes += if (inLager) "ins Lager gelegt" else "aus Lager entfernt"
+
+                        if ((material.notiz ?: "").trim() != notiz.trim()) {
                             if (material.notiz.isNullOrBlank() && notiz.isNotBlank()) {
                                 changes += "Notiz hinzugefügt"
                             } else {
@@ -136,6 +144,7 @@ fun DetailContent(
                             }
                         }
 
+                        // Nur speichern, wenn es echte Änderungen gab
                         if (changes.isEmpty()) {
                             onDismiss()
                             return@Button
@@ -148,11 +157,11 @@ fun DetailContent(
                         )
 
                         val updated = material.copy(
-                            bezeichnung = bezeichnung.ifBlank { null },
-                            seriennummer = seriennummer.ifBlank { null },
-                            position = position.ifBlank { null },
+                            bezeichnung = bezeichnung.trim().ifBlank { null },
+                            seriennummer = seriennummer.trim().ifBlank { null },
+                            position = position.trim().ifBlank { null },
                             inLager = inLager,
-                            notiz = notiz.ifBlank { null },
+                            notiz = notiz.trim().ifBlank { null },
                             verlaufLog = material.verlaufLog + newLog
                         )
 
