@@ -15,6 +15,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.compose.ui.unit.times
 import androidx.compose.ui.window.Dialog
 import kotlinx.coroutines.delay
@@ -27,11 +28,21 @@ fun MonitorView(
     onMaterialSelected: (Material) -> Unit
 ) {
     val ausgegebeneMaterials = viewModel.materials.filter { !it.inLager }
+
+
+
+    val bezeichnungsReihenfolge = listOf("ZPW-12", "ZPW126-10", "ZFS-10")
     val groupedByBezeichnung = viewModel.materials
         .groupBy { it.bezeichnung ?: "Unbekannt" }
-        .toSortedMap()
+        .toList()
+        .sortedWith(compareBy { (bezeichnung, _) ->
+            val index = bezeichnungsReihenfolge.indexOf(bezeichnung)
+            if (index != -1) index else Int.MAX_VALUE
+        })
+        .toMap()
 
     val allBezeichnungen = groupedByBezeichnung.keys.toList()
+
     val allPositions = ausgegebeneMaterials.mapNotNull { it.position }.distinct().sorted()
     val positionColors = remember(allPositions) { generatePositionColors(allPositions) }
 
@@ -97,7 +108,10 @@ fun MonitorView(
                                     modifier = Modifier
                                         .fillMaxWidth()
                                         .padding(vertical = 1.dp)
-                                        .background(positionColor.copy(alpha = 0.3f), shape = MaterialTheme.shapes.small),
+                                        .background(
+                                            positionColor.copy(alpha = 0.3f),
+                                            shape = MaterialTheme.shapes.small
+                                        ),
                                     contentAlignment = Alignment.Center
                                 ) {
                                     Text(
@@ -132,7 +146,13 @@ fun MonitorView(
             }
 
             // Rechte Spalte: Positionen
-            val longestPositionText = allPositions.maxByOrNull { it.length } ?: ""
+            // Sonder-Positionen sortieren
+            val specialPositions = listOf("Reparatur", "Zöllner")
+            val sortedPositions = allPositions
+                .filterNot { it in specialPositions }
+                .sorted() + allPositions.filter { it in specialPositions }
+
+            val longestPositionText = sortedPositions.maxByOrNull { it.length } ?: ""
             val textLengthInDp = longestPositionText.length * 11
             val buttonWidth = textLengthInDp.dp + 32.dp
 
@@ -144,7 +164,7 @@ fun MonitorView(
             ) {
                 Text("Positionen", style = MaterialTheme.typography.h5)
                 Spacer(modifier = Modifier.height(4.dp))
-                allPositions.forEach { position ->
+                sortedPositions.forEach { position ->
                     val color = positionColors[position] ?: Color.LightGray
                     Button(
                         onClick = { selectedPositionForDialog = position },
@@ -159,7 +179,7 @@ fun MonitorView(
             }
         }
 
-        // Filter-Button rechts unten
+            // Filter-Button rechts unten
         Column(
             modifier = Modifier
                 .align(Alignment.BottomEnd)
@@ -292,6 +312,25 @@ fun MaterialBox(material: Material, color: Color, onClick: (Material) -> Unit) {
 }
 
 fun generatePositionColors(positions: List<String>): Map<String, Color> {
+    val customColors = mapOf(
+        "name1" to Color(0xFF4CAF50),     // Grün
+        "hdi" to Color(0xFF9C27B0),       // Lila
+        "zöllner" to Color(0xFFD32F2F),   // Rot
+        "reparatur" to Color(0xFFD32F2F), // Rot
+
+        "max" to Color(0xFF388E3C),       // Dunkelgrün
+        "lisa" to Color(0xFFFBC02D),      // Sattes Gelb
+        "jonas" to Color(0xFF1976D2),     // Mittelblau
+        "sophie" to Color(0xFF00897B),    // Türkisgrün
+        "alex" to Color(0xFF303F9F),      // Nachtblau
+        "maria" to Color(0xFFFFA000),     // Orange-Gelb
+        "tom" to Color(0xFF455A64),       // Dunkelgrau (neutral)
+        "eva" to Color(0xFF689F38),       // Moosgrün
+        "felix" to Color(0xFFFF7043),     // Orange-Rot
+        "nora" to Color(0xFF7E57C2)       // Lavendel/Dunkelviolett
+    )
+
+
     val colors = listOf(
         Color(0xFFB39DDB), Color(0xFFFFF176), Color(0xFFFFAB91), Color(0xFFAED581),
         Color(0xFFFF8A65), Color(0xFF81D4FA), Color(0xFFFFECB3), Color(0xFFCE93D8),
@@ -304,18 +343,15 @@ fun generatePositionColors(positions: List<String>): Map<String, Color> {
         Color(0xFFF0F4C3), Color(0xFFFFE0B2), Color(0xFFF8BBD0), Color(0xFFE1BEE7)
     ).shuffled()
 
-    val specialRed = Color(0xFFD32F2F) // Klarer Rotton für spezielle Positionen
+    val lowerCustomColors = customColors.mapKeys { it.key.lowercase() }
 
     return positions.mapIndexed { index, pos ->
-        val lower = pos.lowercase()
-        val color = if (lower == "zöllner" || lower == "reparatur") {
-            specialRed
-        } else {
-            colors[index % colors.size]
-        }
+        val key = pos.lowercase()
+        val color = lowerCustomColors[key] ?: colors[index % colors.size]
         pos to color
     }.toMap()
 }
+
 
 @Composable
 fun BezeichnungCheckboxList(
@@ -348,15 +384,16 @@ fun BezeichnungCheckboxList(
                     style = MaterialTheme.typography.body1,
                     textAlign = TextAlign.End
                 )
-                CooldownCheckbox(
-                    checked = isSelected,
-                    onCheckedChange = { checked ->
+                ToggleButtonBox(
+                    isChecked = isSelected,
+                    onToggle = {
                         onSelectionChange(
-                            if (checked) selectedBezeichnungen + bezeichnung
+                            if (!isSelected) selectedBezeichnungen + bezeichnung
                             else selectedBezeichnungen - bezeichnung
                         )
                     }
                 )
+
 
             }
         }
@@ -393,6 +430,32 @@ fun CooldownCheckbox(
         if (!enabled) {
             delay(cooldownMillis)
             enabled = true
+        }
+    }
+}
+
+@Composable
+fun ToggleButtonBox(
+    isChecked: Boolean,
+    onToggle: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Box(
+        modifier = modifier
+            .size(20.dp)
+            .background(
+                color = if (isChecked) Color(0xFF4CAF50) else Color.LightGray,
+                shape = MaterialTheme.shapes.small
+            )
+            .border(1.dp, Color.DarkGray, shape = MaterialTheme.shapes.small)
+            .clickable {
+                onToggle()
+            },
+        contentAlignment = Alignment.Center
+    ) {
+        // optional: checkmark
+        if (isChecked) {
+            Text("✓", fontSize = 12.sp, color = Color.White)
         }
     }
 }
