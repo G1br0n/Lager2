@@ -17,8 +17,10 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.times
 import androidx.compose.ui.window.Dialog
+import kotlinx.coroutines.delay
 import models.Material
 import viewModels.MaterialViewModel
+
 @Composable
 fun MonitorView(
     viewModel: MaterialViewModel,
@@ -30,7 +32,6 @@ fun MonitorView(
         .toSortedMap()
 
     val allBezeichnungen = groupedByBezeichnung.keys.toList()
-
     val allPositions = ausgegebeneMaterials.mapNotNull { it.position }.distinct().sorted()
     val positionColors = remember(allPositions) { generatePositionColors(allPositions) }
 
@@ -38,183 +39,176 @@ fun MonitorView(
     val red = Color(0xFFD32F2F)
     val blue = Color(0xFF1976D2)
 
-    // State: ausgewählte Bezeichnungen (in Reihenfolge des Klick
     val selectedBezeichnungenState = remember(allBezeichnungen) {
         mutableStateOf(allBezeichnungen)
     }
     val selectedBezeichnungen = selectedBezeichnungenState.value
 
     var selectedPositionForDialog by remember { mutableStateOf<String?>(null) }
+    var showFilterDialog by remember { mutableStateOf(false) }
 
-    Row(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(4.dp)
-    ) {
-        // Linke Checkbox-Spalte
-        // Linke Checkbox-Spalte
-        Column(
+    Box(modifier = Modifier.fillMaxSize()) {
+        Row(
             modifier = Modifier
-                .padding(end = 4.dp,start = 1.dp)
-                .fillMaxHeight()
-                .width(200.dp)
-                .verticalScroll(rememberScrollState()),
-            horizontalAlignment = Alignment.Start
+                .fillMaxSize()
+                .padding(4.dp)
         ) {
+            // ⛔ BezeichnungCheckboxList entfernt aus MainView!
 
-            allBezeichnungen.forEach { bezeichnung ->
-                val isSelected = selectedBezeichnungen.contains(bezeichnung)
+            // Mittlere Anzeige-Spalten (LazyRow), nur für ausgewählte Bezeichnungen
+            LazyRow(modifier = Modifier.weight(1f)) {
+                val selectedGroups = selectedBezeichnungen.mapNotNull { bezeichnung ->
+                    groupedByBezeichnung[bezeichnung]?.let { bezeichnung to it }
+                }
 
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 1.dp, vertical = 2.dp)
-                ) {
-                    Text(
-                        text = bezeichnung,
+                items(selectedGroups.size) { index ->
+                    val (bezeichnung, materials) = selectedGroups[index]
+                    val inLagerCount = materials.count { it.inLager }
+                    val notInLagerCount = materials.count { !it.inLager }
+                    val totalCount = materials.size
+
+                    LazyColumn(
                         modifier = Modifier
-                            .weight(1f)
-                            .padding(end = 4.dp),
-                        style = MaterialTheme.typography.body1,
-                        textAlign = TextAlign.End
-                    )
-                    Checkbox(
-                        checked = isSelected,
-                        onCheckedChange = { checked ->
-                            selectedBezeichnungenState.value = if (checked) {
-                                selectedBezeichnungen + bezeichnung
-                            } else {
-                                selectedBezeichnungen - bezeichnung
-                            }
-
-                        },
-                        colors = CheckboxDefaults.colors(
-                            checkedColor = Color.Black
-                        )
-                    )
-
-                }
-
-            }
-        }
-
-
-        // Mittlere Anzeige-Spalten (LazyRow), nur für ausgewählte Bezeichnungen
-        LazyRow(modifier = Modifier.weight(1f)) {
-            val selectedGroups = selectedBezeichnungen.mapNotNull { bezeichnung ->
-                groupedByBezeichnung[bezeichnung]?.let { bezeichnung to it }
-            }
-
-            items(selectedGroups.size) { index ->
-                val (bezeichnung, materials) = selectedGroups[index]
-
-                val inLagerCount = materials.count { it.inLager }
-                val notInLagerCount = materials.count { !it.inLager }
-                val totalCount = materials.size
-
-                LazyColumn(
-                    modifier = Modifier
-                        .padding(2.dp)
-                        .fillMaxHeight()
-                        .width(200.dp)
-                        .border(1.dp, Color.LightGray),
-                    horizontalAlignment = Alignment.CenterHorizontally
-                ) {
-                    item {
-                        Text(
-                            text = bezeichnung,
-                            style = MaterialTheme.typography.h5
-                        )
-
-                        Spacer(modifier = Modifier.height(2.dp))
-
-                        Text("$totalCount", color = darkGreen, style = MaterialTheme.typography.h5)
-
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Text("$inLagerCount", color = blue, style = MaterialTheme.typography.h5)
-                            Text(" / ", style = MaterialTheme.typography.h5)
-                            Text("$notInLagerCount", color = red, style = MaterialTheme.typography.h5)
-                        }
-
-                        Spacer(modifier = Modifier.height(4.dp))
-                    }
-
-                    val groupedByPosition = materials.filter { !it.inLager }
-                        .groupBy { it.position ?: "Unbekannt" }
-
-                    groupedByPosition.forEach { (position, posMaterials) ->
+                            .padding(2.dp)
+                            .fillMaxHeight()
+                            .width(200.dp)
+                            .border(1.dp, Color.LightGray),
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
                         item {
-                            val positionColor = positionColors[position] ?: Color.LightGray
-                            Box(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(vertical = 1.dp)
-                                    .background(positionColor.copy(alpha = 0.3f), shape = MaterialTheme.shapes.small),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Text(
-                                    position,
-                                    modifier = Modifier.padding(2.dp),
-                                    style = MaterialTheme.typography.subtitle2
-                                )
+                            Text(bezeichnung, style = MaterialTheme.typography.h5)
+                            Spacer(modifier = Modifier.height(2.dp))
+                            Text("$totalCount", color = darkGreen, style = MaterialTheme.typography.h5)
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Text("$inLagerCount", color = blue, style = MaterialTheme.typography.h5)
+                                Text(" / ", style = MaterialTheme.typography.h5)
+                                Text("$notInLagerCount", color = red, style = MaterialTheme.typography.h5)
                             }
-                            Spacer(modifier = Modifier.height(1.dp))
+                            Spacer(modifier = Modifier.height(4.dp))
                         }
 
-                        items(posMaterials) { material ->
-                            val color = positionColors[material.position] ?: Color.LightGray
-                            MaterialBox(material, color, onMaterialSelected)
-                        }
+                        val groupedByPosition = materials.filter { !it.inLager }
+                            .groupBy { it.position ?: "Unbekannt" }
 
-                        item { Spacer(modifier = Modifier.height(2.dp)) }
+                        groupedByPosition.forEach { (position, posMaterials) ->
+                            item {
+                                val positionColor = positionColors[position] ?: Color.LightGray
+                                Box(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(vertical = 1.dp)
+                                        .background(positionColor.copy(alpha = 0.3f), shape = MaterialTheme.shapes.small),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Text(
+                                        position,
+                                        modifier = Modifier.padding(2.dp),
+                                        style = MaterialTheme.typography.subtitle2
+                                    )
+                                }
+                                Spacer(modifier = Modifier.height(1.dp))
+                            }
+
+                            items(posMaterials) { material ->
+                                val color = positionColors[material.position] ?: Color.LightGray
+                                MaterialBox(material, color, onMaterialSelected)
+                            }
+
+                            item { Spacer(modifier = Modifier.height(2.dp)) }
+                        }
+                    }
+
+                    if (index < selectedGroups.size - 1) {
+                        this@LazyRow.item {
+                            Spacer(
+                                modifier = Modifier
+                                    .width(1.dp)
+                                    .fillMaxHeight()
+                                    .background(Color.Gray)
+                            )
+                        }
                     }
                 }
+            }
 
-                // Vertikale Trennlinie zwischen Spalten
-                if (index < selectedGroups.size - 1) {
-                    this@LazyRow.item {
-                        Spacer(
-                            modifier = Modifier
-                                .width(1.dp)
-                                .fillMaxHeight()
-                                .background(Color.Gray)
-                        )
+            // Rechte Spalte: Positionen
+            val longestPositionText = allPositions.maxByOrNull { it.length } ?: ""
+            val textLengthInDp = longestPositionText.length * 11
+            val buttonWidth = textLengthInDp.dp + 32.dp
+
+            Column(
+                modifier = Modifier
+                    .padding(start = 4.dp)
+                    .fillMaxHeight(),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                Text("Positionen", style = MaterialTheme.typography.h5)
+                Spacer(modifier = Modifier.height(4.dp))
+                allPositions.forEach { position ->
+                    val color = positionColors[position] ?: Color.LightGray
+                    Button(
+                        onClick = { selectedPositionForDialog = position },
+                        colors = ButtonDefaults.buttonColors(backgroundColor = color),
+                        modifier = Modifier
+                            .padding(horizontal = 2.dp, vertical = 1.dp)
+                            .width(buttonWidth)
+                    ) {
+                        Text(position, color = Color.Black)
                     }
                 }
             }
         }
 
-
-        // Rechte Zusatzspalte: Positionen als Buttons mit Farben
-        val longestPositionText = allPositions.maxByOrNull { it.length } ?: ""
-        val textLengthInDp = longestPositionText.length * 11// ca. 9.dp pro Zeichen bei Buttons
-        val buttonWidth = textLengthInDp.dp + 32.dp // etwas Padding dazu
-
-
+        // Filter-Button rechts unten
         Column(
             modifier = Modifier
-                .padding(start = 4.dp)
-                .fillMaxHeight(),
-            horizontalAlignment = Alignment.CenterHorizontally
+                .align(Alignment.BottomEnd)
+                .padding(16.dp)
         ) {
-            Text("Positionen", style = MaterialTheme.typography.h5)
-            Spacer(modifier = Modifier.height(4.dp))
-            allPositions.forEach { position ->
-                val color = positionColors[position] ?: Color.LightGray
-                Button(
-                    onClick = { selectedPositionForDialog = position },
-                    colors = ButtonDefaults.buttonColors(backgroundColor = color),
-                    modifier = Modifier
-                        .padding(horizontal = 2.dp, vertical = 1.dp)
-                        .width(buttonWidth as Dp)
+            Button(onClick = { showFilterDialog = true }) {
+                Text("Filter")
+            }
+        }
+
+        // Bezeichnungsauswahl als Dialog
+        if (showFilterDialog) {
+            Dialog(onDismissRequest = { showFilterDialog = false }) {
+                Surface(
+                    shape = MaterialTheme.shapes.medium,
+                    color = MaterialTheme.colors.surface,
+                    elevation = 8.dp
                 ) {
-                    Text(position, color = Color.Black)
+                    Column(
+                        modifier = Modifier
+                            .padding(16.dp)
+                            .width(300.dp)
+                            .heightIn(max = 500.dp)
+                    ) {
+                        Text("Filter: Bezeichnungen", style = MaterialTheme.typography.h6)
+                        Spacer(modifier = Modifier.height(8.dp))
+
+                        BezeichnungCheckboxList(
+                            allBezeichnungen = allBezeichnungen,
+                            selectedBezeichnungen = selectedBezeichnungen,
+                            onSelectionChange = {
+                                selectedBezeichnungenState.value = it
+                            }
+                        )
+
+                        Spacer(modifier = Modifier.height(16.dp))
+
+                        Button(
+                            onClick = { showFilterDialog = false },
+                            modifier = Modifier.align(Alignment.End)
+                        ) {
+                            Text("Übernehmen")
+                        }
+                    }
                 }
             }
         }
 
-
+        // Positions-Dialog
         if (selectedPositionForDialog != null) {
             Dialog(onDismissRequest = { selectedPositionForDialog = null }) {
                 Surface(
@@ -245,9 +239,7 @@ fun MonitorView(
                         val items = ausgegebeneMaterials
                             .filter { it.position == selectedPositionForDialog }
 
-                        LazyColumn(
-                            modifier = Modifier.fillMaxSize()
-                        ) {
+                        LazyColumn(modifier = Modifier.fillMaxSize()) {
                             items(items) { material ->
                                 Row(
                                     modifier = Modifier
@@ -268,16 +260,15 @@ fun MonitorView(
                                     )
                                 }
                             }
-
                         }
                     }
                 }
             }
         }
-
-
     }
 }
+
+
 
 
 @Composable
@@ -324,4 +315,84 @@ fun generatePositionColors(positions: List<String>): Map<String, Color> {
         }
         pos to color
     }.toMap()
+}
+
+@Composable
+fun BezeichnungCheckboxList(
+    allBezeichnungen: List<String>,
+    selectedBezeichnungen: List<String>,
+    onSelectionChange: (List<String>) -> Unit
+) {
+    Column(
+        modifier = Modifier
+            .padding(end = 4.dp, start = 1.dp)
+            .fillMaxHeight()
+            .width(200.dp)
+            .verticalScroll(rememberScrollState()),
+        horizontalAlignment = Alignment.Start
+    ) {
+        allBezeichnungen.forEach { bezeichnung ->
+            val isSelected = selectedBezeichnungen.contains(bezeichnung)
+
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 1.dp, vertical = 2.dp)
+            ) {
+                Text(
+                    text = bezeichnung,
+                    modifier = Modifier
+                        .weight(1f)
+                        .padding(end = 4.dp),
+                    style = MaterialTheme.typography.body1,
+                    textAlign = TextAlign.End
+                )
+                CooldownCheckbox(
+                    checked = isSelected,
+                    onCheckedChange = { checked ->
+                        onSelectionChange(
+                            if (checked) selectedBezeichnungen + bezeichnung
+                            else selectedBezeichnungen - bezeichnung
+                        )
+                    }
+                )
+
+            }
+        }
+    }
+}
+
+
+@Composable
+fun CooldownCheckbox(
+    checked: Boolean,
+    onCheckedChange: (Boolean) -> Unit,
+    modifier: Modifier = Modifier,
+    cooldownMillis: Long = 2000
+) {
+    var enabled by remember { mutableStateOf(true) }
+    var lastToggleTime by remember { mutableStateOf(0L) }
+
+    Checkbox(
+        checked = checked,
+        onCheckedChange = {
+            if (enabled) {
+                onCheckedChange(it)
+                lastToggleTime = System.currentTimeMillis()
+                enabled = false
+            }
+        },
+        enabled = enabled,
+        modifier = modifier,
+        colors = CheckboxDefaults.colors(checkedColor = Color.Black)
+    )
+
+    // Cooldown re-aktivieren
+    LaunchedEffect(lastToggleTime) {
+        if (!enabled) {
+            delay(cooldownMillis)
+            enabled = true
+        }
+    }
 }

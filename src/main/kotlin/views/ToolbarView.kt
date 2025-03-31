@@ -122,20 +122,17 @@ fun ScanDialog(mode: String, viewModel: MaterialViewModel, onDismiss: () -> Unit
     LaunchedEffect(mode) { viewModel.selectedMode = mode }
 
     var empfaenger by remember { mutableStateOf(viewModel.empfaengerName) }
-    var abgeberName by remember { mutableStateOf("") }
     var seriennummer by remember { mutableStateOf("") }
     var notiz by remember { mutableStateOf("") }
-
-    var showEmpfaengerWarning by remember { mutableStateOf(false) }
-    var showAbgeberWarning by remember { mutableStateOf(false) }
+    val log = remember { mutableStateListOf<String>() }
 
     val focusSerial = remember { FocusRequester() }
     val focusEmpfaenger = remember { FocusRequester() }
-    val focusAbgeber = remember { FocusRequester() }
-
-    val log = remember { mutableStateListOf<String>() }
 
     val dialogState = rememberDialogState(width = 1200.dp, height = 500.dp)
+
+    var showEmpfaengerWarning by remember { mutableStateOf(false) }
+    var errorOverlayText by remember { mutableStateOf<String?>(null) }
 
     DialogWindow(onCloseRequest = onDismiss, state = dialogState, title = "") {
         Surface(
@@ -146,31 +143,6 @@ fun ScanDialog(mode: String, viewModel: MaterialViewModel, onDismiss: () -> Unit
         ) {
             Row(modifier = Modifier.fillMaxSize()) {
                 Column(modifier = Modifier.weight(1f)) {
-
-                    if (mode == "Empfang") {
-                        OutlinedTextField(
-                            value = abgeberName,
-                            onValueChange = {
-                                abgeberName = it
-                                showAbgeberWarning = false
-                            },
-                            label = { Text("Abgegeben von") },
-                            singleLine = true,
-                            isError = showAbgeberWarning,
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .focusRequester(focusAbgeber)
-                                .onPreviewKeyEvent {
-                                    if (it.key == Key.Enter && it.type == KeyEventType.KeyUp) {
-                                        if (abgeberName.isBlank()) showAbgeberWarning = true
-                                        else focusSerial.requestFocus()
-                                        true
-                                    } else false
-                                }
-                        )
-                        if (showAbgeberWarning) Text("Bitte Name der abgebenden Person eingeben.", color = MaterialTheme.colors.error)
-                        Spacer(modifier = Modifier.height(8.dp))
-                    }
 
                     if (mode == "Ausgabe") {
                         OutlinedTextField(
@@ -187,16 +159,19 @@ fun ScanDialog(mode: String, viewModel: MaterialViewModel, onDismiss: () -> Unit
                                 .focusRequester(focusEmpfaenger)
                                 .onPreviewKeyEvent {
                                     if (it.key == Key.Enter && it.type == KeyEventType.KeyUp) {
-                                        if (empfaenger.isBlank()) showEmpfaengerWarning = true
-                                        else {
-                                            viewModel.empfaengerName = empfaenger
+                                        if (empfaenger.isBlank()) {
+                                            showEmpfaengerWarning = true
+                                            errorOverlayText = "Empfänger darf nicht leer sein"
+                                        } else {
                                             focusSerial.requestFocus()
                                         }
                                         true
                                     } else false
                                 }
                         )
-                        if (showEmpfaengerWarning) Text("Empfänger darf nicht leer sein.", color = MaterialTheme.colors.error)
+                        if (showEmpfaengerWarning)
+                            Text("Empfänger darf nicht leer sein.", color = MaterialTheme.colors.error)
+
                         Spacer(modifier = Modifier.height(8.dp))
                     }
 
@@ -213,17 +188,17 @@ fun ScanDialog(mode: String, viewModel: MaterialViewModel, onDismiss: () -> Unit
                                     if (seriennummer.isNotBlank()) {
                                         if (mode == "Ausgabe" && empfaenger.isBlank()) {
                                             showEmpfaengerWarning = true
+                                            errorOverlayText = "Empfänger darf nicht leer sein"
                                             focusEmpfaenger.requestFocus()
-                                        } else if (mode == "Empfang" && abgeberName.isBlank()) {
-                                            showAbgeberWarning = true
-                                            focusAbgeber.requestFocus()
                                         } else {
-                                            viewModel.empfaengerName = empfaenger
+                                            // Position hier ggf. automatisch auf "Lager" setzen
+                                            viewModel.tempPosition = "Lager"
+
                                             val result = viewModel.processScan(seriennummer)
                                             if (result != null && result.toString().trim().isNotEmpty()) {
                                                 log.add("$result SN $seriennummer")
                                             } else {
-                                                // Fehler wurde im ViewModel behandelt (z.B. Warnung anzeigen)
+                                                errorOverlayText = "Unbekannte Seriennummer oder Fehler"
                                             }
                                             seriennummer = ""
                                             focusSerial.requestFocus()
@@ -253,9 +228,13 @@ fun ScanDialog(mode: String, viewModel: MaterialViewModel, onDismiss: () -> Unit
                         }
                         Spacer(modifier = Modifier.width(8.dp))
                         Button(onClick = {
-                            if ((mode == "Ausgabe" && empfaenger.isBlank()) || (mode == "Empfang" && abgeberName.isBlank())) {
-                                if (mode == "Ausgabe") showEmpfaengerWarning = true else showAbgeberWarning = true
+                            if (mode == "Ausgabe" && empfaenger.isBlank()) {
+                                showEmpfaengerWarning = true
+                                errorOverlayText = "Empfänger darf nicht leer sein"
                             } else {
+                                // Jetzt wird alles dauerhaft ins ViewModel übernommen
+                                viewModel.empfaengerName = empfaenger
+                                viewModel.tempLog = log.toList() // falls du speichern willst
                                 onDismiss()
                             }
                         }) {
@@ -291,13 +270,21 @@ fun ScanDialog(mode: String, viewModel: MaterialViewModel, onDismiss: () -> Unit
         }
     }
 
+    // Initial-Fokus
     LaunchedEffect(Unit) {
         delay(100)
         if (mode == "Ausgabe" && empfaenger.isBlank()) focusEmpfaenger.requestFocus()
-        else if (mode == "Empfang" && abgeberName.isBlank()) focusAbgeber.requestFocus()
         else focusSerial.requestFocus()
     }
+
+    // Fehleranzeige (Overlay)
+    errorOverlayText?.let { text ->
+        ErrorOverlayWindow(errorText = text) {
+            errorOverlayText = null
+        }
+    }
 }
+
 
 @Composable
 fun ErrorOverlayWindow(errorText: String, onDismiss: () -> Unit) {

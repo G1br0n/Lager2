@@ -30,6 +30,12 @@ class MaterialViewModel(private val repository: MaterialRepository) {
     var filterText by mutableStateOf("")
     var filterActive by mutableStateOf(false)
 
+
+    var tempLog: List<String> = emptyList()
+    var tempPosition: String = ""
+
+
+
     val filteredMaterials: List<Material>
         get() = if (!filterActive || filterText.isBlank()) {
             materials
