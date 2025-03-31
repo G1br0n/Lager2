@@ -1,6 +1,5 @@
 package views
 
-
 import androidx.compose.foundation.*
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -10,16 +9,13 @@ import androidx.compose.material.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
-import androidx.compose.ui.unit.times
 import androidx.compose.ui.window.Dialog
-import kotlinx.coroutines.delay
+import config.APPConfig
 import models.Material
+import tools.ToggleButtonBox
 import viewModels.MaterialViewModel
 
 @Composable
@@ -27,11 +23,13 @@ fun MonitorView(
     viewModel: MaterialViewModel,
     onMaterialSelected: (Material) -> Unit
 ) {
+
+    val config = APPConfig
+
     val ausgegebeneMaterials = viewModel.materials.filter { !it.inLager }
 
+    val bezeichnungsReihenfolge = config.bezeichnungsReihenfolge
 
-
-    val bezeichnungsReihenfolge = listOf("ZPW-12", "ZPW126-10", "ZFS-10")
     val groupedByBezeichnung = viewModel.materials
         .groupBy { it.bezeichnung ?: "Unbekannt" }
         .toList()
@@ -64,7 +62,6 @@ fun MonitorView(
                 .fillMaxSize()
                 .padding(4.dp)
         ) {
-            // ⛔ BezeichnungCheckboxList entfernt aus MainView!
 
             // Mittlere Anzeige-Spalten (LazyRow), nur für ausgewählte Bezeichnungen
             LazyRow(modifier = Modifier.weight(1f)) {
@@ -147,7 +144,9 @@ fun MonitorView(
 
             // Rechte Spalte: Positionen
             // Sonder-Positionen sortieren
-            val specialPositions = listOf("Reparatur", "Zöllner")
+
+            val specialPositions = config.specialPositions
+
             val sortedPositions = allPositions
                 .filterNot { it in specialPositions }
                 .sorted() + allPositions.filter { it in specialPositions }
@@ -289,8 +288,6 @@ fun MonitorView(
 }
 
 
-
-
 @Composable
 fun MaterialBox(material: Material, color: Color, onClick: (Material) -> Unit) {
     val cleanedSerial = material.seriennummer?.trimEnd() ?: ""
@@ -309,47 +306,6 @@ fun MaterialBox(material: Material, color: Color, onClick: (Material) -> Unit) {
         Text(displaySerial, style = MaterialTheme.typography.h5)
     }
 
-}
-
-fun generatePositionColors(positions: List<String>): Map<String, Color> {
-    val customColors = mapOf(
-        "name1" to Color(0xFF4CAF50),     // Grün
-        "hdi" to Color(0xFF9C27B0),       // Lila
-        "zöllner" to Color(0xFFD32F2F),   // Rot
-        "reparatur" to Color(0xFFD32F2F), // Rot
-
-        "max" to Color(0xFF388E3C),       // Dunkelgrün
-        "lisa" to Color(0xFFFBC02D),      // Sattes Gelb
-        "jonas" to Color(0xFF1976D2),     // Mittelblau
-        "sophie" to Color(0xFF00897B),    // Türkisgrün
-        "alex" to Color(0xFF303F9F),      // Nachtblau
-        "maria" to Color(0xFFFFA000),     // Orange-Gelb
-        "tom" to Color(0xFF455A64),       // Dunkelgrau (neutral)
-        "eva" to Color(0xFF689F38),       // Moosgrün
-        "felix" to Color(0xFFFF7043),     // Orange-Rot
-        "nora" to Color(0xFF7E57C2)       // Lavendel/Dunkelviolett
-    )
-
-
-    val colors = listOf(
-        Color(0xFFB39DDB), Color(0xFFFFF176), Color(0xFFFFAB91), Color(0xFFAED581),
-        Color(0xFFFF8A65), Color(0xFF81D4FA), Color(0xFFFFECB3), Color(0xFFCE93D8),
-        Color(0xFFF8BBD0), Color(0xFFBBDEFB), Color(0xFFFFF59D), Color(0xFFE1BEE7),
-        Color(0xFFFFCCBC), Color(0xFFA5D6A7), Color(0xFFB2EBF2), Color(0xFFFFE082),
-        Color(0xFF4DD0E1), Color(0xFFB2DFDB), Color(0xFFD1C4E9), Color(0xFFF0F4C3),
-        Color(0xFF80DEEA), Color(0xFFFFCDD2), Color(0xFFD7CCC8), Color(0xFF4DB6AC),
-        Color(0xFFDCEDC8), Color(0xFFB388FF), Color(0xFFFFA726), Color(0xFFC8E6C9),
-        Color(0xFFC5CAE9), Color(0xFFFFCC80), Color(0xFF81C784), Color(0xFFB3E5FC),
-        Color(0xFFF0F4C3), Color(0xFFFFE0B2), Color(0xFFF8BBD0), Color(0xFFE1BEE7)
-    ).shuffled()
-
-    val lowerCustomColors = customColors.mapKeys { it.key.lowercase() }
-
-    return positions.mapIndexed { index, pos ->
-        val key = pos.lowercase()
-        val color = lowerCustomColors[key] ?: colors[index % colors.size]
-        pos to color
-    }.toMap()
 }
 
 
@@ -401,61 +357,18 @@ fun BezeichnungCheckboxList(
 }
 
 
-@Composable
-fun CooldownCheckbox(
-    checked: Boolean,
-    onCheckedChange: (Boolean) -> Unit,
-    modifier: Modifier = Modifier,
-    cooldownMillis: Long = 2000
-) {
-    var enabled by remember { mutableStateOf(true) }
-    var lastToggleTime by remember { mutableStateOf(0L) }
+fun generatePositionColors(positions: List<String>): Map<String, Color> {
+   val config = APPConfig
 
-    Checkbox(
-        checked = checked,
-        onCheckedChange = {
-            if (enabled) {
-                onCheckedChange(it)
-                lastToggleTime = System.currentTimeMillis()
-                enabled = false
-            }
-        },
-        enabled = enabled,
-        modifier = modifier,
-        colors = CheckboxDefaults.colors(checkedColor = Color.Black)
-    )
+    val customColors = config.customColors
+    val colors = config.colors
 
-    // Cooldown re-aktivieren
-    LaunchedEffect(lastToggleTime) {
-        if (!enabled) {
-            delay(cooldownMillis)
-            enabled = true
-        }
-    }
+    val lowerCustomColors = customColors.mapKeys { it.key.lowercase() }
+
+    return positions.mapIndexed { index, pos ->
+        val key = pos.lowercase()
+        val color = lowerCustomColors[key] ?: colors[index % colors.size]
+        pos to color
+    }.toMap()
 }
 
-@Composable
-fun ToggleButtonBox(
-    isChecked: Boolean,
-    onToggle: () -> Unit,
-    modifier: Modifier = Modifier
-) {
-    Box(
-        modifier = modifier
-            .size(20.dp)
-            .background(
-                color = if (isChecked) Color(0xFF4CAF50) else Color.LightGray,
-                shape = MaterialTheme.shapes.small
-            )
-            .border(1.dp, Color.DarkGray, shape = MaterialTheme.shapes.small)
-            .clickable {
-                onToggle()
-            },
-        contentAlignment = Alignment.Center
-    ) {
-        // optional: checkmark
-        if (isChecked) {
-            Text("✓", fontSize = 12.sp, color = Color.White)
-        }
-    }
-}

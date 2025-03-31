@@ -4,33 +4,21 @@
 // Importe für Compose Desktop, JLayer, SQLite und weitere benötigte Klassen
 // ----------------------------
 import androidx.compose.desktop.ui.tooling.preview.Preview
-import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material.*
 import androidx.compose.runtime.*
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.focus.FocusRequester
-import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.input.key.*
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.*
-import javazoom.jl.player.advanced.AdvancedPlayer
 import models.Material
 import repositorys.SQLiteMaterialRepository
+import views.dialogs.DetailDialog
+import views.dialogs.MissingNameDialog
+import views.dialogs.NewMaterialDialog
 import viewModels.MaterialViewModel
 import views.*
-import java.sql.Connection
-import java.sql.DriverManager
-import java.time.LocalDateTime
-import java.util.UUID
 
 @OptIn(ExperimentalComposeUiApi::class)
 @Composable
