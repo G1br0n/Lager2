@@ -10,7 +10,6 @@ import java.time.format.DateTimeFormatter
 
 fun generateUebergabePdf(empfaenger: String, log: List<String>, modus: String = "Ausgabe") {
     val doc = PDDocument()
-    val pages = mutableListOf<PDPage>()
     val contentStreams = mutableListOf<PDPageContentStream>()
 
     val margin = 50f
@@ -26,7 +25,6 @@ fun generateUebergabePdf(empfaenger: String, log: List<String>, modus: String = 
     // Inhalt pro Seite
     pagesContent.forEach { pageEntries ->
         val page = PDPage(PDRectangle.A4)
-        pages.add(page)
         doc.addPage(page)
 
         val content = PDPageContentStream(doc, page)
@@ -107,21 +105,21 @@ fun generateUebergabePdf(empfaenger: String, log: List<String>, modus: String = 
     val folder = File(desktop, "Uebergabeprotokolle")
     if (!folder.exists()) folder.mkdirs()
 
+    // Dateiname vorbereiten
     val cleanName = empfaenger.replace(" ", "_")
-    // Nutze:
-    val outputFile = File.createTempFile("${protokollTitel}_${cleanName}_$date", ".pdf")
+        .replace("[^a-zA-Z0-9_.-]".toRegex(), "_") // Sonderzeichen filtern
+    val fileName = "${protokollTitel}_${cleanName}_$date.pdf"
+    val outputFile = File(folder, fileName)
 
     doc.save(outputFile)
     doc.close()
 
-    println("✅ $protokollTitel erstellt: ${outputFile.absolutePath}")
+    println("✅ $protokollTitel gespeichert unter: ${outputFile.absolutePath}")
 
+    // Öffne PDF
     if (Desktop.isDesktopSupported()) {
         try {
             Desktop.getDesktop().open(outputFile)
-
-            // Optional: Temp-Datei beim JVM-Exit löschen
-            outputFile.deleteOnExit()
         } catch (e: Exception) {
             println("⚠️ PDF konnte nicht geöffnet werden: ${e.message}")
         }
