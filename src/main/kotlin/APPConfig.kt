@@ -5,14 +5,22 @@ import androidx.compose.ui.graphics.Color
 object APPConfig {
     //Farbe zuweisung
     val customColors = mapOf(
-        "name1" to Color(0xFF4CAF50),     // Grün
-        "hdi" to Color(0xFF9C27B0),       // Lila
+        //-------------Sonder Position
         "zöllner" to Color(0xFFD32F2F),   // Rot
         "reparatur" to Color(0xFFD32F2F), // Rot
+
+        //--------------Mitarbeiter vordefeniert
+        "makhach" to Color(0xFF4CAF50),     // Grün
+        "walter" to Color(0xFF00897B),    // Türkisgrün
+
+        //--------------Andere
+        "hdi" to Color(0xFF9C27B0),       // Lila
+
+
+        //--------------Beispiele
         "max" to Color(0xFF388E3C),       // Dunkelgrün
         "lisa" to Color(0xFFFBC02D),      // Sattes Gelb
         "jonas" to Color(0xFF1976D2),     // Mittelblau
-        "sophie" to Color(0xFF00897B),    // Türkisgrün
         "alex" to Color(0xFF303F9F),      // Nachtblau
         "maria" to Color(0xFFFFA000),     // Orange-Gelb
         "tom" to Color(0xFF455A64),       // Dunkelgrau
@@ -24,7 +32,11 @@ object APPConfig {
     val bezeichnungsReihenfolge = listOf(
         "ZPW-12",
         "ZPW126-10",
-        "ZFS-10"
+        "ZFS-10",
+        "F500-SEN",
+        "F500-AB",
+        "ZRC-10",
+        "ZRC-V"
     )
 
     //Sortirt butons bei position am ende in der rein folge
