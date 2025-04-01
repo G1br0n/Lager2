@@ -19,6 +19,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.*
 import kotlinx.coroutines.delay
+import tools.generateUebergabePdf
 import viewModels.MaterialViewModel
 
 @Composable
@@ -248,9 +249,21 @@ fun ScanDialog(mode: String, viewModel: MaterialViewModel, onDismiss: () -> Unit
                     Spacer(modifier = Modifier.height(16.dp))
 
                     Row(horizontalArrangement = Arrangement.End, modifier = Modifier.fillMaxWidth()) {
-                        Button(onClick = { println("PDF-Log anzeigen") }) {
+                        Button(onClick = {
+                            val name = if (mode == "Ausgabe") empfaenger else abgeberName
+                            if (name.isBlank()) {
+                                if (mode == "Ausgabe") showEmpfaengerWarning = true else showAbgeberWarning = true
+                            } else {
+                                generateUebergabePdf(
+                                    empfaenger = name,
+                                    log = log.toList(),
+                                    modus = mode
+                                )
+                            }
+                        }) {
                             Text("Verlauf drucken")
                         }
+
                         Spacer(modifier = Modifier.width(8.dp))
                         Button(onClick = {
                             if ((mode == "Ausgabe" && empfaenger.isBlank()) || (mode == "Empfang" && abgeberName.isBlank())) {
