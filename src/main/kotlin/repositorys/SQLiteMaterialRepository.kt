@@ -64,6 +64,46 @@ class SQLiteMaterialRepository : MaterialRepository {
                 stmt.execute("ALTER TABLE materials ADD COLUMN position TEXT")
             }
         }
+
+        // Nur unter Windows Migration durchführen
+        val isWindows = System.getProperty("os.name").startsWith("Windows", ignoreCase = true)
+
+        if (isWindows) {
+            println("Starte Seriennummer-Migration (Windows erkannt)...")
+
+            val selectQuery = "SELECT id, seriennummer FROM materials"
+            val updateQuery = "UPDATE materials SET seriennummer = ? WHERE id = ?"
+
+            connection.prepareStatement(selectQuery).use { selectStmt ->
+                val rs = selectStmt.executeQuery()
+                val toUpdate = mutableListOf<Pair<String, String>>() // (id, neue Seriennummer)
+
+                while (rs.next()) {
+                    val id = rs.getString("id")
+                    val seriennummer = rs.getString("seriennummer") ?: continue
+
+                    if (seriennummer.isNotEmpty() && !seriennummer[0].isDigit()) {
+                        val newSerial = "~" + seriennummer.drop(1)
+                        toUpdate.add(id to newSerial)
+                    }
+                }
+
+                if (toUpdate.isNotEmpty()) {
+                    connection.prepareStatement(updateQuery).use { updateStmt ->
+                        for ((id, newSerial) in toUpdate) {
+                            updateStmt.setString(1, newSerial)
+                            updateStmt.setString(2, id)
+                            updateStmt.addBatch()
+                        }
+                        updateStmt.executeBatch()
+                        println("Seriennummern aktualisiert: ${toUpdate.size} Einträge.")
+                    }
+                } else {
+                    println("Keine Seriennummern zur Migration gefunden.")
+                }
+            }
+        }
+
     }
 
     override fun getAllMaterials(): List<Material> {
