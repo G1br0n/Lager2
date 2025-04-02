@@ -15,6 +15,8 @@ interface MaterialRepository {
     fun getAllMaterials(): List<Material>
     fun addMaterial(material: Material)
     fun updateMaterial(material: Material)
+    fun deleteMaterial(material: Material)
+
 }
 
 /**
@@ -193,4 +195,23 @@ class SQLiteMaterialRepository : MaterialRepository {
             stmt.executeBatch()
         }
     }
+
+    override fun deleteMaterial(material: Material) {
+        // Zuerst die Logs löschen
+        val deleteLogs = "DELETE FROM material_log WHERE material_id = ?"
+        connection.prepareStatement(deleteLogs).use { stmt ->
+            stmt.setString(1, material.id.toString())
+            stmt.executeUpdate()
+        }
+
+        // Dann das Material selbst löschen
+        val deleteMaterial = "DELETE FROM materials WHERE id = ?"
+        connection.prepareStatement(deleteMaterial).use { stmt ->
+            stmt.setString(1, material.id.toString())
+            stmt.executeUpdate()
+        }
+
+        println("✅ Material gelöscht: ${material.bezeichnung} (${material.seriennummer})")
+    }
+
 }

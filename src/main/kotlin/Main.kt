@@ -1,36 +1,18 @@
 // main.kt
 
-// ----------------------------
-// Importe für Compose Desktop, JLayer, SQLite und weitere benötigte Klassen
-// ----------------------------
 import androidx.compose.desktop.ui.tooling.preview.Preview
-import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material.*
 import androidx.compose.runtime.*
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.focus.FocusRequester
-import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.input.key.*
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.*
-import javazoom.jl.player.advanced.AdvancedPlayer
 import models.Material
 import repositorys.SQLiteMaterialRepository
 import viewModels.MaterialViewModel
 import views.*
-import java.sql.Connection
-import java.sql.DriverManager
-import java.time.LocalDateTime
-import java.util.UUID
 
 @OptIn(ExperimentalComposeUiApi::class)
 @Composable
@@ -53,7 +35,7 @@ fun App(viewModel: MaterialViewModel) {
     var selectedMaterial by remember { mutableStateOf<Material?>(null) }
     var showMissingNameDialog by remember { mutableStateOf(false) }
 
-    val selected = selectedMaterial // ✅ Kopie gegen null während Recomposition
+    val selected = selectedMaterial
 
     MaterialTheme(colors = GrayColorPalette) {
         Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
@@ -81,7 +63,10 @@ fun App(viewModel: MaterialViewModel) {
 
         if (showDetailDialog && selected != null) {
             DialogWindow(
-                onCloseRequest = { showDetailDialog = false },
+                onCloseRequest = {
+                    showDetailDialog = false
+                    selectedMaterial = null
+                },
                 title = "Materialdetails",
                 state = rememberDialogState(width = 1200.dp, height = 450.dp),
                 resizable = true,
@@ -89,10 +74,19 @@ fun App(viewModel: MaterialViewModel) {
             ) {
                 DetailDialog(
                     material = selected,
-                    onDismiss = { showDetailDialog = false },
-                    onSave = { updated ->
-                        viewModel.updateMaterial(updated)
+                    onDismiss = {
                         showDetailDialog = false
+                        selectedMaterial = null
+                    },
+                    onSave = {
+                        viewModel.updateMaterial(it)
+                        showDetailDialog = false
+                        selectedMaterial = null
+                    },
+                    onDelete = {
+                        viewModel.deleteMaterial(it)
+                        showDetailDialog = false
+                        selectedMaterial = null
                     },
                     readOnly = true
                 )
@@ -105,27 +99,26 @@ fun App(viewModel: MaterialViewModel) {
     }
 }
 
-/**
- * In der main-Funktion wird nun ein einziger Repository- und ViewModel-Instanz erzeugt,
- * die in beiden Fenstern (Lagerverwaltung und Monitor) geteilt werden.
- */
 fun main() = application {
     val repository = SQLiteMaterialRepository()
     val viewModel = MaterialViewModel(repository)
 
     var selectedMaterialForMonitor by remember { mutableStateOf<Material?>(null) }
-    val selectedMonitor = selectedMaterialForMonitor // ✅ Schutz für Compose-Update
+    val selectedMonitor = selectedMaterialForMonitor
 
+    // 🪟 Hauptfenster
     Window(onCloseRequest = ::exitApplication, title = "Lagerverwaltung (MVVM & Grautöne)") {
         App(viewModel)
     }
 
+    // 🖥️ Zweitfenster: Monitor
     Window(onCloseRequest = {}, title = "Material Monitor") {
         MonitorView(viewModel) { selected ->
             selectedMaterialForMonitor = selected
         }
     }
 
+    // 🔍 Detailansicht im Monitor mit Read-Only
     if (selectedMonitor != null) {
         DialogWindow(
             onCloseRequest = { selectedMaterialForMonitor = null },
@@ -137,8 +130,12 @@ fun main() = application {
             DetailDialog(
                 material = selectedMonitor,
                 onDismiss = { selectedMaterialForMonitor = null },
-                onSave = { updated ->
-                    viewModel.updateMaterial(updated)
+                onSave = {
+                    viewModel.updateMaterial(it)
+                    selectedMaterialForMonitor = null
+                },
+                onDelete = {
+                    viewModel.deleteMaterial(it)
                     selectedMaterialForMonitor = null
                 },
                 readOnly = true

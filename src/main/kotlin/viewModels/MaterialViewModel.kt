@@ -120,6 +120,16 @@ class MaterialViewModel(private val repository: MaterialRepository) {
         }
     }
 
+    fun deleteMaterial(material: Material) {
+        materials.removeIf { it.id == material.id }
+        repository.deleteMaterial(material)
+
+        popupWarningText = "„${material.bezeichnung ?: "Unbekannt"}“ wurde gelöscht."
+        showPopupWarning = true
+        playSuccessTone()
+    }
+
+
     fun updatePosition(serial: String, newPosition: String) {
         val material = materials.find { it.seriennummer?.trim()?.startsWith(serial.trim()) == true }
         if (material != null) {

@@ -7,6 +7,8 @@ import androidx.compose.material.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.input.key.*
+import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import models.Material
 import models.MaterialLog
@@ -17,15 +19,17 @@ fun DetailDialog(
     material: Material,
     onDismiss: () -> Unit,
     onSave: (Material) -> Unit,
+    onDelete: (Material) -> Unit, // ✅ hinzufügen
     readOnly: Boolean = false
-) {
+)
+ {
     var showEditMode by remember { mutableStateOf(!readOnly) }
     var showPasswordDialog by remember { mutableStateOf(false) }
 
     if (showPasswordDialog) {
         PasswordPrompt(
             onConfirm = {
-                if (it == "test") {
+                if (it == "löschen") {
                     showEditMode = true
                     showPasswordDialog = false
                 } else {
@@ -36,14 +40,17 @@ fun DetailDialog(
         )
     }
 
-    DetailContent(
-        material = material,
-        readOnly = !showEditMode,
-        onDismiss = onDismiss,
-        onEditRequest = { showPasswordDialog = true },
-        onSave = onSave
-    )
-}
+     DetailContent(
+         material = material,
+         readOnly = !showEditMode,
+         onDismiss = onDismiss,
+         onEditRequest = { showPasswordDialog = true },
+         onSave = onSave,
+         onDelete = onDelete // ✅ Weiterleitung hinzufügen
+     )
+
+ }
+
 
 @Composable
 fun DetailContent(
@@ -51,13 +58,54 @@ fun DetailContent(
     readOnly: Boolean,
     onDismiss: () -> Unit,
     onEditRequest: () -> Unit = {},
-    onSave: (Material) -> Unit
+    onSave: (Material) -> Unit,
+    onDelete: (Material) -> Unit
 ) {
     var bezeichnung by remember { mutableStateOf(material.bezeichnung ?: "") }
     var seriennummer by remember { mutableStateOf(material.seriennummer ?: "") }
     var inLager by remember { mutableStateOf(material.inLager) }
     var notiz by remember { mutableStateOf(material.notiz ?: "") }
     var position by remember { mutableStateOf(material.position ?: "") }
+
+    var showDeletePasswordDialog by remember { mutableStateOf(false) }
+    var showDeleteConfirmDialog by remember { mutableStateOf(false) }
+
+    // 🔐 Passwortabfrage vor Löschen
+    if (showDeletePasswordDialog) {
+        PasswordPrompt(
+            onConfirm = {
+                if (it == "test") {
+                    showDeletePasswordDialog = false
+                    showDeleteConfirmDialog = true
+                } else {
+                    showDeletePasswordDialog = false
+                }
+            },
+            onCancel = { showDeletePasswordDialog = false }
+        )
+    }
+
+    // ✅ Bestätigungsdialog nach erfolgreicher Passwortabfrage
+    if (showDeleteConfirmDialog) {
+        AlertDialog(
+            onDismissRequest = { showDeleteConfirmDialog = false },
+            title = { Text("Löschen bestätigen") },
+            text = { Text("Möchtest du dieses Material wirklich unwiderruflich löschen?") },
+            confirmButton = {
+                Button(onClick = {
+                    onDelete(material)
+                    showDeleteConfirmDialog = false
+                }) {
+                    Text("Löschen")
+                }
+            },
+            dismissButton = {
+                OutlinedButton(onClick = { showDeleteConfirmDialog = false }) {
+                    Text("Abbrechen")
+                }
+            }
+        )
+    }
 
     Row(
         modifier = Modifier
@@ -144,7 +192,6 @@ fun DetailContent(
                             }
                         }
 
-                        // Nur speichern, wenn es echte Änderungen gab
                         if (changes.isEmpty()) {
                             onDismiss()
                             return@Button
@@ -168,6 +215,16 @@ fun DetailContent(
                         onSave(updated)
                     }) {
                         Text("Speichern")
+                    }
+
+                    Spacer(modifier = Modifier.width(8.dp))
+
+                    // 🛡️ Geschützter Lösch-Button
+                    Button(
+                        onClick = { showDeletePasswordDialog = true },
+                        colors = ButtonDefaults.buttonColors(backgroundColor = MaterialTheme.colors.error)
+                    ) {
+                        Text("Löschen", color = MaterialTheme.colors.onError)
                     }
                 }
             }
@@ -199,6 +256,7 @@ fun DetailContent(
     }
 }
 
+
 @Composable
 fun PasswordPrompt(onConfirm: (String) -> Unit, onCancel: () -> Unit) {
     var password by remember { mutableStateOf("") }
@@ -209,23 +267,35 @@ fun PasswordPrompt(onConfirm: (String) -> Unit, onCancel: () -> Unit) {
         text = {
             Column {
                 Text("Bitte Passwort eingeben, um Bearbeitungsmodus zu aktivieren.")
-                Spacer(modifier = Modifier.height(8.dp))
-                TextField(
-                    value = password,
-                    onValueChange = { password = it },
-                    label = { Text("Passwort") }
-                )
-            }
-        },
-        confirmButton = {
-            Button(onClick = { onConfirm(password) }) {
-                Text("Bestätigen")
+                Spacer(modifier = Modifier.height(12.dp))
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    OutlinedTextField(
+                        value = password,
+                        onValueChange = { password = it },
+                        label = { Text("Passwort") },
+                        singleLine = true,
+                        visualTransformation = PasswordVisualTransformation(),
+                        modifier = Modifier
+                            .weight(1f)
+                            .onPreviewKeyEvent {
+                                if (it.key == Key.Enter && it.type == KeyEventType.KeyUp) {
+                                    onConfirm(password)
+                                    true
+                                } else false
+                            }
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Button(onClick = { onConfirm(password) }) {
+                        Text("OK")
+                    }
+                }
             }
         },
         dismissButton = {
             OutlinedButton(onClick = onCancel) {
                 Text("Abbrechen")
             }
-        }
+        },
+        confirmButton = {} // Leerer Platzhalter, weil wir den OK-Button oben verwenden
     )
 }
