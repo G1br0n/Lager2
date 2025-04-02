@@ -17,7 +17,6 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import models.Material
 import viewModels.MaterialViewModel
-
 @Composable
 fun MaterialListView(
     viewModel: MaterialViewModel,
@@ -36,7 +35,8 @@ fun MaterialListView(
             ) {
                 Text(material.bezeichnung ?: "–", modifier = Modifier.weight(1f))
                 Text(material.seriennummer?.trimEnd() ?: "", modifier = Modifier.weight(1f))
-                Text(if (material.inLager) "Lager" else "Ausgegeben", modifier = Modifier.weight(1f))
+                Text(if (material.inLager) "Verfügbar" else "Ausgegeben", modifier = Modifier.weight(1f))
+                Text(material.position ?: "–", modifier = Modifier.weight(1f)) // ✅ NEU: Position
                 Text(material.notiz ?: "–", modifier = Modifier.weight(1f))
             }
             Divider()
