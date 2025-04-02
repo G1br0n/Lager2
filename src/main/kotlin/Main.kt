@@ -94,7 +94,7 @@ fun App(viewModel: MaterialViewModel) {
                         viewModel.updateMaterial(updated)
                         showDetailDialog = false
                     },
-                    readOnly = false
+                    readOnly = true
                 )
             }
         }
