@@ -22,11 +22,15 @@ import kotlinx.coroutines.delay
 import tools.generateUebergabePdf
 import viewModels.MaterialViewModel
 
+
+// TODO --------------------------------- ToolbarView ---------------------------------
 @Composable
 fun ToolbarView(viewModel: MaterialViewModel, onNewMaterialClick: () -> Unit) {
     var showDialog by remember { mutableStateOf<String?>(null) }
     var showPasswordDialog by remember { mutableStateOf(false) }
 
+
+    // TODO --------------------------------- Empfang/Ausgabe Button ---------------------------------
     Row(
         modifier = Modifier.fillMaxWidth().padding(vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -56,6 +60,7 @@ fun ToolbarView(viewModel: MaterialViewModel, onNewMaterialClick: () -> Unit) {
             }
         }
 
+        // TODO --------------------------------- FILTER ---------------------------------
         Row(
             verticalAlignment = Alignment.CenterVertically,
             modifier = Modifier.weight(1f).padding(horizontal = 16.dp)
@@ -84,7 +89,7 @@ fun ToolbarView(viewModel: MaterialViewModel, onNewMaterialClick: () -> Unit) {
                 )
             }
         }
-
+        // TODO --------------------------------- Neu ---------------------------------
         Button(
             onClick = { showPasswordDialog = true },
             modifier = Modifier.height(48.dp).padding(horizontal = 4.dp)
@@ -101,6 +106,7 @@ fun ToolbarView(viewModel: MaterialViewModel, onNewMaterialClick: () -> Unit) {
         )
     }
 
+    // TODO --------------------------------- PASSWORT ---------------------------------
     if (showPasswordDialog) {
         PasswordPrompt(
             onConfirm = {
@@ -116,7 +122,7 @@ fun ToolbarView(viewModel: MaterialViewModel, onNewMaterialClick: () -> Unit) {
 
 
 
-
+// TODO SCAN DIALOG ---------------------------------
 @OptIn(ExperimentalComposeUiApi::class)
 @Composable
 fun ScanDialog(mode: String, viewModel: MaterialViewModel, onDismiss: () -> Unit) {
@@ -303,6 +309,18 @@ fun ScanDialog(mode: String, viewModel: MaterialViewModel, onDismiss: () -> Unit
             }
         }
     }
+
+    // TODO SCAN DIALOG ---------------------------------
+    if (viewModel.showPopupWarning) {
+        ErrorOverlayWindow(
+            errorText = viewModel.popupWarningText,
+            onDismiss = {
+                viewModel.showPopupWarning = false
+                viewModel.popupWarningText = ""
+            }
+        )
+    }
+
 
     LaunchedEffect(Unit) {
         delay(100)
