@@ -21,6 +21,10 @@ import models.Material
 import tools.ToggleButtonBox
 import viewModels.MaterialViewModel
 
+
+private const val FLASH_DURATION_MS = 2500L
+
+
 @Composable
 fun MonitorView(
     viewModel: MaterialViewModel,
@@ -133,6 +137,7 @@ fun MonitorView(
                                     MaterialBox(material, color, onMaterialSelected)
                                 }
                             }
+
 
 
 
@@ -356,29 +361,28 @@ fun MaterialBox(
     val cleanedSerial = material.seriennummer?.trimEnd() ?: ""
     val displaySerial = if (cleanedSerial.length > 6) cleanedSerial.takeLast(6) else cleanedSerial
 
-    // Zustand: Empfang → soll "flashen" (schwarz/weiß)
-    var isFlashing by remember { mutableStateOf(material.inLager) }
+    // Zustand: true = "just updated", z. B. Ausgabe oder Empfang
+    var isFlashing by remember { mutableStateOf(true) }
 
+    // Welche Flashfarbe je nach Zustand?
+    val isEmpfangen = material.inLager
+    val flashBackground = if (isEmpfangen) Color.Black else Color(0xFFFFFF00) // Gelb
+    val flashText = if (isEmpfangen) Color.White else Color.Black
+
+    // Dynamische Farben
     val backgroundColor by animateColorAsState(
-        targetValue = when {
-            isFlashing -> Color.Black
-            else -> color
-        },
-        animationSpec = tween(durationMillis = 2500)
+        targetValue = if (isFlashing) flashBackground else color,
+        animationSpec = tween(durationMillis = FLASH_DURATION_MS.toInt())
     )
-
     val textColor by animateColorAsState(
-        targetValue = if (isFlashing) Color.White else Color.Black,
-        animationSpec = tween(durationMillis = 2500)
+        targetValue = if (isFlashing) flashText else Color.Black,
+        animationSpec = tween(durationMillis = FLASH_DURATION_MS.toInt())
     )
 
-    LaunchedEffect(material.inLager) {
-        // Nur beim Empfang flashen lassen
-        if (material.inLager) {
-            isFlashing = true
-            delay(2500)
-            isFlashing = false
-        }
+    LaunchedEffect(material.id, material.inLager) {
+        isFlashing = true
+        delay(FLASH_DURATION_MS)
+        isFlashing = false
     }
 
     Box(
@@ -394,6 +398,7 @@ fun MaterialBox(
         Text(displaySerial, style = MaterialTheme.typography.h5.copy(color = textColor))
     }
 }
+
 
 
 
