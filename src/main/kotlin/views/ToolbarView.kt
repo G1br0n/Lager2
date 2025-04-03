@@ -261,11 +261,16 @@ fun ScanDialog(mode: String, viewModel: MaterialViewModel, onDismiss: () -> Unit
 
 
 
-                        Button(
-                            onClick = { showUndoDialog = true }
-                        ) {
-                            Text("RückScan")
+                        if (mode == "Ausgabe") {
+                            Button(
+                                onClick = { showUndoDialog = true }
+                            ) {
+                                Text("RückScan")
+                            }
+
+                            Spacer(modifier = Modifier.width(8.dp))
                         }
+
 
                         Spacer(modifier = Modifier.width(8.dp))
 
@@ -299,7 +304,11 @@ fun ScanDialog(mode: String, viewModel: MaterialViewModel, onDismiss: () -> Unit
 
                 Spacer(modifier = Modifier.width(16.dp))
 
-                Column(modifier = Modifier.weight(1f)) {
+                Column(
+                    modifier = Modifier
+                        .weight(1f)
+                        .fillMaxHeight()
+                )  {
                     Text("Verlauf", style = MaterialTheme.typography.subtitle1)
                     Spacer(modifier = Modifier.height(8.dp))
                     val grouped = log.filter { it.contains("SN") }
