@@ -342,15 +342,24 @@ fun ScanDialog(mode: String, viewModel: MaterialViewModel, onDismiss: () -> Unit
                 val index = log.indexOfLast { it.contains("SN $sn") }
                 if (index != -1) {
                     log.removeAt(index)
+
+                    // ✅ NEU: DB-Update via ViewModel
+                    val success = viewModel.undoMaterialBySerial(sn)
+                    if (!success) {
+                        viewModel.popupWarningText = "Material mit Seriennummer '$sn' nicht gefunden."
+                        viewModel.showPopupWarning = true
+                    }
+
                     showUndoDialog = false
                 } else {
-                    viewModel.popupWarningText = "Eintrag mit Seriennummer '$sn' nicht gefunden."
+                    viewModel.popupWarningText = "Eintrag mit Seriennummer '$sn' nicht im Verlauf gefunden."
                     viewModel.showPopupWarning = true
                     showUndoDialog = false
                 }
             }
         )
     }
+
 
     LaunchedEffect(Unit) {
         delay(100)

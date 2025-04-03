@@ -156,6 +156,30 @@ class MaterialViewModel(private val repository: MaterialRepository) {
         }
     }
 
+    fun undoMaterialBySerial(serial: String): Boolean {
+        val material = materials.find { it.seriennummer?.trim()?.startsWith(serial.trim()) == true }
+        return if (material != null) {
+            val updated = material.copy(
+                inLager = true,
+                position = "Lager",
+                verlaufLog = material.verlaufLog + MaterialLog(
+                    timestamp = LocalDateTime.now(),
+                    user = "System",
+                    event = "Material per Rücknahme ins Lager zurückgeführt"
+                )
+            )
+            updateMaterial(updated)
+            playSuccessTone()
+            true
+        } else {
+            popupWarningText = "Material mit Seriennummer $serial nicht gefunden."
+            showPopupWarning = true
+            playErrorTone()
+            false
+        }
+    }
+
+
     private fun playSuccessTone() { Thread { playMp3FromResource("/mp3/ok.mp3") }.start() }
     fun playErrorTone() { Thread { playMp3FromResource("/mp3/error.mp3") }.start() }
 }
