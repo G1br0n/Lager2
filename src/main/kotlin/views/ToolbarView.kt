@@ -143,6 +143,7 @@ fun ScanDialog(mode: String, viewModel: MaterialViewModel, onDismiss: () -> Unit
     val log = remember { mutableStateListOf<String>() }
 
     val dialogState = rememberDialogState(width = 1200.dp, height = 500.dp)
+    var showUndoDialog by remember { mutableStateOf(false) }
 
     DialogWindow(onCloseRequest = onDismiss, state = dialogState, title = "") {
         Surface(
@@ -255,6 +256,19 @@ fun ScanDialog(mode: String, viewModel: MaterialViewModel, onDismiss: () -> Unit
                     Spacer(modifier = Modifier.height(16.dp))
 
                     Row(horizontalArrangement = Arrangement.End, modifier = Modifier.fillMaxWidth()) {
+
+                        Spacer(modifier = Modifier.width(8.dp))
+
+
+
+                        Button(
+                            onClick = { showUndoDialog = true }
+                        ) {
+                            Text("RückScan")
+                        }
+
+                        Spacer(modifier = Modifier.width(8.dp))
+
                         Button(onClick = {
                             val name = if (mode == "Ausgabe") empfaenger else abgeberName
                             if (name.isBlank()) {
@@ -321,6 +335,22 @@ fun ScanDialog(mode: String, viewModel: MaterialViewModel, onDismiss: () -> Unit
         )
     }
 
+    if (showUndoDialog) {
+        UndoScanDialog(
+            onDismiss = { showUndoDialog = false },
+            onUndoSuccess = { sn ->
+                val index = log.indexOfLast { it.contains("SN $sn") }
+                if (index != -1) {
+                    log.removeAt(index)
+                    showUndoDialog = false
+                } else {
+                    viewModel.popupWarningText = "Eintrag mit Seriennummer '$sn' nicht gefunden."
+                    viewModel.showPopupWarning = true
+                    showUndoDialog = false
+                }
+            }
+        )
+    }
 
     LaunchedEffect(Unit) {
         delay(100)
@@ -365,6 +395,62 @@ fun ErrorOverlayWindow(errorText: String, onDismiss: () -> Unit) {
                 color = MaterialTheme.colors.error,
                 style = MaterialTheme.typography.h3
             )
+        }
+    }
+}@Composable
+fun UndoScanDialog(
+    onDismiss: () -> Unit,
+    onUndoSuccess: (String) -> Unit
+) {
+    var seriennummer by remember { mutableStateOf("") }
+    var error by remember { mutableStateOf<String?>(null) }
+
+    val dialogState = rememberDialogState(width = 500.dp, height = 250.dp)
+
+    DialogWindow(
+        onCloseRequest = onDismiss,
+        state = dialogState,
+        title = "Rücknahme"
+    ) {
+        Surface(modifier = Modifier.fillMaxSize().padding(16.dp)) {
+            Column(
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                modifier = Modifier.fillMaxSize()
+            ) {
+                Text("Seriennummer eingeben", style = MaterialTheme.typography.h6)
+
+                OutlinedTextField(
+                    value = seriennummer,
+                    onValueChange = {
+                        seriennummer = it
+                        error = null
+                    },
+                    label = { Text("Seriennummer") },
+                    isError = error != null,
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+                if (error != null) {
+                    Text(error!!, color = MaterialTheme.colors.error)
+                }
+
+                Row(horizontalArrangement = Arrangement.End, modifier = Modifier.fillMaxWidth()) {
+                    Button(onClick = onDismiss) {
+                        Text("Abbrechen")
+                    }
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Button(onClick = {
+                        if (seriennummer.isBlank()) {
+                            error = "Bitte Seriennummer eingeben"
+                        } else {
+                            onUndoSuccess(seriennummer)
+                        }
+                    }) {
+                        Text("Rücknahme durchführen")
+                    }
+                }
+            }
         }
     }
 }
