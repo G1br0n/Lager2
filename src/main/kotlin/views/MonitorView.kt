@@ -33,7 +33,29 @@ fun MonitorView(
 
     val config = APPConfig
 
-    val ausgegebeneMaterials = viewModel.materials.filter { !it.inLager }
+    // Temporär gespeicherte Materialien, die empfangen wurden und noch angezeigt werden
+    val fakeNotInLager = remember { mutableStateListOf<Material>() }
+
+    val ausgegebeneMaterials = viewModel.materials.filter {
+        !it.inLager || fakeNotInLager.any { fake -> fake.id == it.id }
+    }
+
+// Update-Effekt: Wenn Material empfangen wird → kurz drin lassen
+    LaunchedEffect(viewModel.materials) {
+        val justReceived = viewModel.materials.filter { it.inLager }
+
+        justReceived.forEach { receivedMat ->
+            val alreadyInList = fakeNotInLager.any { it.id == receivedMat.id }
+            if (!alreadyInList) {
+                fakeNotInLager.add(receivedMat)
+
+                // Nach der Flash-Zeit wieder entfernen
+                delay(FLASH_DURATION_MS)
+                fakeNotInLager.remove(receivedMat)
+            }
+        }
+    }
+
 
     val bezeichnungsReihenfolge = config.bezeichnungsReihenfolge
 
