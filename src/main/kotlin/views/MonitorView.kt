@@ -1,5 +1,7 @@
 package views
 
+import androidx.compose.animation.*
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.*
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -14,6 +16,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import config.APPConfig
+import kotlinx.coroutines.delay
 import models.Material
 import tools.ToggleButtonBox
 import viewModels.MaterialViewModel
@@ -119,11 +122,19 @@ fun MonitorView(
                                 }
                                 Spacer(modifier = Modifier.height(1.dp))
                             }
-
-                            items(posMaterials) { material ->
+                            items(posMaterials, key = { it.id }) { material ->
                                 val color = positionColors[material.position] ?: Color.LightGray
-                                MaterialBox(material, color, onMaterialSelected)
+
+                                AnimatedVisibility(
+                                    visible = true,
+                                    enter = fadeIn() + expandVertically(),
+                                    exit = fadeOut() + shrinkVertically()
+                                ) {
+                                    MaterialBox(material, color, onMaterialSelected)
+                                }
                             }
+
+
 
                             item { Spacer(modifier = Modifier.height(2.dp)) }
                         }
@@ -337,9 +348,27 @@ fun MonitorView(
 
 
 @Composable
-fun MaterialBox(material: Material, color: Color, onClick: (Material) -> Unit) {
+fun MaterialBox(
+    material: Material,
+    color: Color,
+    onClick: (Material) -> Unit
+) {
     val cleanedSerial = material.seriennummer?.trimEnd() ?: ""
     val displaySerial = if (cleanedSerial.length > 6) cleanedSerial.takeLast(6) else cleanedSerial
+
+    // ✨ Flash-Animation bei Neuerscheinung
+    var isFlashing by remember { mutableStateOf(true) }
+
+    val backgroundColor by animateColorAsState(
+        targetValue = if (isFlashing) Color.Yellow.copy(alpha = 0.7f) else color,
+        animationSpec = tween(durationMillis = 700)
+    )
+
+    LaunchedEffect(Unit) {
+        // Nach kurzer Zeit normal einfärben
+        delay(700)
+        isFlashing = false
+    }
 
     Box(
         modifier = Modifier
@@ -347,14 +376,14 @@ fun MaterialBox(material: Material, color: Color, onClick: (Material) -> Unit) {
             .height(50.dp)
             .padding(horizontal = 3.dp, vertical = 2.dp)
             .clickable { onClick(material) }
-            .background(color, shape = MaterialTheme.shapes.medium)
+            .background(backgroundColor, shape = MaterialTheme.shapes.medium)
             .border(2.dp, Color.Gray, shape = MaterialTheme.shapes.medium),
         contentAlignment = Alignment.Center
     ) {
         Text(displaySerial, style = MaterialTheme.typography.h5)
     }
-
 }
+
 
 
 @Composable
