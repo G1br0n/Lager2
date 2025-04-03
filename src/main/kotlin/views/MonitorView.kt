@@ -356,18 +356,29 @@ fun MaterialBox(
     val cleanedSerial = material.seriennummer?.trimEnd() ?: ""
     val displaySerial = if (cleanedSerial.length > 6) cleanedSerial.takeLast(6) else cleanedSerial
 
-    // ✨ Flash-Animation bei Neuerscheinung
-    var isFlashing by remember { mutableStateOf(true) }
+    // Zustand: Empfang → soll "flashen" (schwarz/weiß)
+    var isFlashing by remember { mutableStateOf(material.inLager) }
 
     val backgroundColor by animateColorAsState(
-        targetValue = if (isFlashing) Color.Yellow.copy(alpha = 0.7f) else color,
-        animationSpec = tween(durationMillis = 700)
+        targetValue = when {
+            isFlashing -> Color.Black
+            else -> color
+        },
+        animationSpec = tween(durationMillis = 2500)
     )
 
-    LaunchedEffect(Unit) {
-        // Nach kurzer Zeit normal einfärben
-        delay(700)
-        isFlashing = false
+    val textColor by animateColorAsState(
+        targetValue = if (isFlashing) Color.White else Color.Black,
+        animationSpec = tween(durationMillis = 2500)
+    )
+
+    LaunchedEffect(material.inLager) {
+        // Nur beim Empfang flashen lassen
+        if (material.inLager) {
+            isFlashing = true
+            delay(2500)
+            isFlashing = false
+        }
     }
 
     Box(
@@ -380,9 +391,10 @@ fun MaterialBox(
             .border(2.dp, Color.Gray, shape = MaterialTheme.shapes.medium),
         contentAlignment = Alignment.Center
     ) {
-        Text(displaySerial, style = MaterialTheme.typography.h5)
+        Text(displaySerial, style = MaterialTheme.typography.h5.copy(color = textColor))
     }
 }
+
 
 
 
