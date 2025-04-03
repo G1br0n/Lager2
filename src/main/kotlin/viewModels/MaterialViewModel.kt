@@ -158,26 +158,65 @@ class MaterialViewModel(private val repository: MaterialRepository) {
 
     fun undoMaterialBySerial(serial: String): Boolean {
         val material = materials.find { it.seriennummer?.trim()?.startsWith(serial.trim()) == true }
+
         return if (material != null) {
-            val updated = material.copy(
-                inLager = true,
-                position = "Lager",
-                verlaufLog = material.verlaufLog + MaterialLog(
-                    timestamp = LocalDateTime.now(),
-                    user = "System",
-                    event = "Material per Rücknahme ins Lager zurückgeführt"
-                )
-            )
+            val letzteAktion = material.verlaufLog.lastOrNull()
+
+            if (letzteAktion == null) {
+                popupWarningText = "Keine vorherige Aktion für Seriennummer $serial gefunden."
+                showPopupWarning = true
+                playErrorTone()
+                return false
+            }
+
+            val updated = when {
+                letzteAktion.event.contains("ausgegeben an") -> {
+                    // Material wurde ausgegeben – wir machen es rückgängig (zurück ins Lager)
+                    material.copy(
+                        inLager = true,
+                        position = "Lager",
+                        verlaufLog = material.verlaufLog + MaterialLog(
+                            timestamp = LocalDateTime.now(),
+                            user = "System",
+                            event = "Ausgabe rückgängig gemacht – zurück ins Lager"
+                        )
+                    )
+                }
+
+                letzteAktion.event.contains("empfangen von") -> {
+                    // Material wurde empfangen – wir machen es rückgängig (zurück zur Person)
+                    val name = letzteAktion.event.substringAfter("empfangen von").trim()
+                    material.copy(
+                        inLager = false,
+                        position = name,
+                        verlaufLog = material.verlaufLog + MaterialLog(
+                            timestamp = LocalDateTime.now(),
+                            user = "System",
+                            event = "Empfang rückgängig gemacht – zurück zu $name"
+                        )
+                    )
+                }
+
+                else -> {
+                    popupWarningText = "Letzte Aktion kann nicht rückgängig gemacht werden."
+                    showPopupWarning = true
+                    playErrorTone()
+                    return false
+                }
+            }
+
             updateMaterial(updated)
             playSuccessTone()
-            true
+            return true
+
         } else {
             popupWarningText = "Material mit Seriennummer $serial nicht gefunden."
             showPopupWarning = true
             playErrorTone()
-            false
+            return false
         }
     }
+
 
 
     private fun playSuccessTone() { Thread { playMp3FromResource("/mp3/ok.mp3") }.start() }
