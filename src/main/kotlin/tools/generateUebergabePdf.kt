@@ -17,12 +17,26 @@ fun generateUebergabePdf(empfaenger: String, log: List<String>, modus: String = 
     val usableHeight = PDRectangle.A4.height - 2 * margin
     val maxLinesPerPage = ((usableHeight - 160f) / lineHeight).toInt()
 
-    val pagesContent = log.chunked(maxLinesPerPage)
-
     val isAusgabe = modus.lowercase() == "ausgabe"
     val protokollTitel = if (isAusgabe) "Ausgabeprotokoll" else "Empfangsprotokoll"
 
-    // Inhalt pro Seite
+    // Gruppieren wie im ScanDialog
+    val groupedLog = log.filter { it.contains("SN") }
+        .groupBy { it.substringBefore(" SN") }
+        .toSortedMap()
+
+    val sortedAndFormattedLog = groupedLog.flatMap { (materialArt, eintraege) ->
+        listOf("$materialArt") + eintraege.asReversed().mapIndexed { index, eintrag ->
+            "${eintraege.size - index}. $eintrag"
+        } + ""
+    }
+
+    // Gesamtanzahl
+    val totalItems = log.count { it.contains("SN") }
+
+    // Seitenweise Inhalte aufteilen
+    val pagesContent = sortedAndFormattedLog.chunked(maxLinesPerPage)
+
     pagesContent.forEach { pageEntries ->
         val page = PDPage(PDRectangle.A4)
         doc.addPage(page)
@@ -32,33 +46,45 @@ fun generateUebergabePdf(empfaenger: String, log: List<String>, modus: String = 
 
         var y = page.mediaBox.height - margin
 
+        // Titel
         content.beginText()
         content.setFont(PDType1Font.HELVETICA_BOLD, 18f)
         content.newLineAtOffset(margin, y)
         content.showText(protokollTitel)
         content.endText()
-
         y -= 30f
 
+        // Name
         content.beginText()
         content.setFont(PDType1Font.HELVETICA, 12f)
         content.newLineAtOffset(margin, y)
         content.showText("Name: $empfaenger")
         content.endText()
+        y -= 20f
 
+        // Anzahl
+        content.beginText()
+        content.setFont(PDType1Font.HELVETICA, 12f)
+        content.newLineAtOffset(margin, y)
+        content.showText("Gesamtanzahl: $totalItems")
+        content.endText()
         y -= 30f
 
-        pageEntries.forEachIndexed { index, entry ->
+        // Einträge
+        pageEntries.forEach { entry ->
             content.beginText()
-            content.setFont(PDType1Font.HELVETICA, 10f)
+            content.setFont(
+                if (!entry.contains("SN")) PDType1Font.HELVETICA_BOLD else PDType1Font.HELVETICA,
+                10f
+            )
             content.newLineAtOffset(margin, y)
-            content.showText("${index + 1}. $entry")
+            content.showText(entry)
             content.endText()
             y -= lineHeight
         }
     }
 
-    // Hinweis + Unterschrift nur auf der letzten Seite
+    // Hinweis & Unterschrift auf letzter Seite
     val lastStream = contentStreams.last()
     val sigY = margin + 80f
 
@@ -82,14 +108,13 @@ fun generateUebergabePdf(empfaenger: String, log: List<String>, modus: String = 
         regelY -= 14f
     }
 
-    // Unterschrift
+    // Unterschrift + Datum
     lastStream.beginText()
     lastStream.setFont(PDType1Font.HELVETICA, 12f)
     lastStream.newLineAtOffset(margin, sigY)
     lastStream.showText("Unterschrift: _________________________")
     lastStream.endText()
 
-    // Datum
     lastStream.beginText()
     lastStream.setFont(PDType1Font.HELVETICA, 12f)
     lastStream.newLineAtOffset(margin, sigY - 20f)
@@ -97,17 +122,15 @@ fun generateUebergabePdf(empfaenger: String, log: List<String>, modus: String = 
     lastStream.showText("Datum: $date")
     lastStream.endText()
 
-    // Stream schließen
     contentStreams.forEach { it.close() }
 
-    // Zielordner auf Desktop
+    // Zielordner & Dateiname
     val desktop = System.getProperty("user.home") + "/Desktop"
     val folder = File(desktop, "Uebergabeprotokolle")
     if (!folder.exists()) folder.mkdirs()
 
-    // Dateiname vorbereiten
     val cleanName = empfaenger.replace(" ", "_")
-        .replace("[^a-zA-Z0-9_.-]".toRegex(), "_") // Sonderzeichen filtern
+        .replace("[^a-zA-Z0-9_.-]".toRegex(), "_")
     val fileName = "${protokollTitel}_${cleanName}_$date.pdf"
     val outputFile = File(folder, fileName)
 
@@ -116,7 +139,6 @@ fun generateUebergabePdf(empfaenger: String, log: List<String>, modus: String = 
 
     println("✅ $protokollTitel gespeichert unter: ${outputFile.absolutePath}")
 
-    // Öffne PDF
     if (Desktop.isDesktopSupported()) {
         try {
             Desktop.getDesktop().open(outputFile)
