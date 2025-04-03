@@ -20,22 +20,29 @@ fun generateUebergabePdf(empfaenger: String, log: List<String>, modus: String = 
     val isAusgabe = modus.lowercase() == "ausgabe"
     val protokollTitel = if (isAusgabe) "Ausgabeprotokoll" else "Empfangsprotokoll"
 
-    // Gruppieren wie im ScanDialog
-    val groupedLog = log.filter { it.contains("SN") }
-        .groupBy { it.substringBefore(" SN") }
+    // Gruppieren wie im ScanDialog – UND Seriennummern sortieren
+    val groupedLog = log
+        .filter { it.contains("SN") }
+        .mapNotNull { entry ->
+            val parts = entry.split(" SN ")
+            if (parts.size == 2) parts[0] to parts[1] else null
+        }
+        .groupBy({ it.first }, { it.second })
         .toSortedMap()
 
-    val sortedAndFormattedLog = groupedLog.flatMap { (materialArt, eintraege) ->
-        listOf("$materialArt") + eintraege.asReversed().mapIndexed { index, eintrag ->
-            "${eintraege.size - index}. $eintrag"
-        } + ""
+    // Für PDF: ["Bezeichnung - Anzahl", "1. Seriennummer", ...]
+    val formattedLogLines = groupedLog.flatMap { (material, seriennummern) ->
+        val sortedSns = seriennummern.sorted()
+        listOf("$material - ${sortedSns.size}") +
+                sortedSns.mapIndexed { index, sn -> "${index + 1}. $sn" } +
+                listOf("") // Leerzeile dazwischen
     }
 
-    // Gesamtanzahl
-    val totalItems = log.count { it.contains("SN") }
+    // Gesamtanzahl aller Seriennummern
+    val totalItems = groupedLog.values.sumOf { it.size }
 
-    // Seitenweise Inhalte aufteilen
-    val pagesContent = sortedAndFormattedLog.chunked(maxLinesPerPage)
+    // Seitenweise Inhalte
+    val pagesContent = formattedLogLines.chunked(maxLinesPerPage)
 
     pagesContent.forEach { pageEntries ->
         val page = PDPage(PDRectangle.A4)
@@ -62,7 +69,7 @@ fun generateUebergabePdf(empfaenger: String, log: List<String>, modus: String = 
         content.endText()
         y -= 20f
 
-        // Anzahl
+        // Gesamtanzahl
         content.beginText()
         content.setFont(PDType1Font.HELVETICA, 12f)
         content.newLineAtOffset(margin, y)
@@ -70,21 +77,21 @@ fun generateUebergabePdf(empfaenger: String, log: List<String>, modus: String = 
         content.endText()
         y -= 30f
 
-        // Einträge
-        pageEntries.forEach { entry ->
+        // Einträge (Materialgruppen & SNs)
+        pageEntries.forEach { line ->
             content.beginText()
             content.setFont(
-                if (!entry.contains("SN")) PDType1Font.HELVETICA_BOLD else PDType1Font.HELVETICA,
+                if (!line.contains(".")) PDType1Font.HELVETICA_BOLD else PDType1Font.HELVETICA,
                 10f
             )
             content.newLineAtOffset(margin, y)
-            content.showText(entry)
+            content.showText(line)
             content.endText()
             y -= lineHeight
         }
     }
 
-    // Hinweis & Unterschrift auf letzter Seite
+    // Hinweis & Unterschrift
     val lastStream = contentStreams.last()
     val sigY = margin + 80f
 
@@ -108,7 +115,6 @@ fun generateUebergabePdf(empfaenger: String, log: List<String>, modus: String = 
         regelY -= 14f
     }
 
-    // Unterschrift + Datum
     lastStream.beginText()
     lastStream.setFont(PDType1Font.HELVETICA, 12f)
     lastStream.newLineAtOffset(margin, sigY)
@@ -124,7 +130,7 @@ fun generateUebergabePdf(empfaenger: String, log: List<String>, modus: String = 
 
     contentStreams.forEach { it.close() }
 
-    // Zielordner & Dateiname
+    // Speicherort
     val desktop = System.getProperty("user.home") + "/Desktop"
     val folder = File(desktop, "Uebergabeprotokolle")
     if (!folder.exists()) folder.mkdirs()
@@ -147,3 +153,4 @@ fun generateUebergabePdf(empfaenger: String, log: List<String>, modus: String = 
         }
     }
 }
+
