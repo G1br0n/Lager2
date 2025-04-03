@@ -121,7 +121,6 @@ fun ToolbarView(viewModel: MaterialViewModel, onNewMaterialClick: () -> Unit) {
 }
 
 
-
 // TODO SCAN DIALOG ---------------------------------
 @OptIn(ExperimentalComposeUiApi::class)
 @Composable
@@ -176,7 +175,10 @@ fun ScanDialog(mode: String, viewModel: MaterialViewModel, onDismiss: () -> Unit
                                     } else false
                                 }
                         )
-                        if (showAbgeberWarning) Text("Bitte Name der abgebenden Person eingeben.", color = MaterialTheme.colors.error)
+                        if (showAbgeberWarning) Text(
+                            "Bitte Name der abgebenden Person eingeben.",
+                            color = MaterialTheme.colors.error
+                        )
                         Spacer(modifier = Modifier.height(8.dp))
                     }
 
@@ -204,7 +206,10 @@ fun ScanDialog(mode: String, viewModel: MaterialViewModel, onDismiss: () -> Unit
                                     } else false
                                 }
                         )
-                        if (showEmpfaengerWarning) Text("Empfänger darf nicht leer sein.", color = MaterialTheme.colors.error)
+                        if (showEmpfaengerWarning) Text(
+                            "Empfänger darf nicht leer sein.",
+                            color = MaterialTheme.colors.error
+                        )
                         Spacer(modifier = Modifier.height(8.dp))
                     }
 
@@ -255,7 +260,7 @@ fun ScanDialog(mode: String, viewModel: MaterialViewModel, onDismiss: () -> Unit
 
                     Spacer(modifier = Modifier.height(16.dp))
 
-                    Row(horizontalArrangement = Arrangement.End, modifier = Modifier.fillMaxWidth()) {
+                    Row(horizontalArrangement = Arrangement.End, modifier = Modifier.fillMaxSize()) {
 
                         Spacer(modifier = Modifier.width(8.dp))
 
@@ -290,6 +295,7 @@ fun ScanDialog(mode: String, viewModel: MaterialViewModel, onDismiss: () -> Unit
                         }
 
                         Spacer(modifier = Modifier.width(8.dp))
+
                         Button(onClick = {
                             if ((mode == "Ausgabe" && empfaenger.isBlank()) || (mode == "Empfang" && abgeberName.isBlank())) {
                                 if (mode == "Ausgabe") showEmpfaengerWarning = true else showAbgeberWarning = true
@@ -308,14 +314,14 @@ fun ScanDialog(mode: String, viewModel: MaterialViewModel, onDismiss: () -> Unit
                     modifier = Modifier
                         .weight(1f)
                         .fillMaxHeight()
-                )  {
+                ) {
                     Text("Verlauf", style = MaterialTheme.typography.subtitle1)
                     Spacer(modifier = Modifier.height(8.dp))
                     val grouped = log.filter { it.contains("SN") }
                         .groupBy { it.substringBefore(" SN") }
                         .toSortedMap()
 
-                    LazyColumn(modifier = Modifier.fillMaxWidth().height(200.dp)) {
+                    LazyColumn(modifier = Modifier.fillMaxSize()) {
                         grouped.forEach { (material, entries) ->
                             item {
                                 Text(material, style = MaterialTheme.typography.subtitle1)
@@ -329,6 +335,7 @@ fun ScanDialog(mode: String, viewModel: MaterialViewModel, onDismiss: () -> Unit
                         }
                     }
                 }
+
             }
         }
     }
@@ -415,7 +422,9 @@ fun ErrorOverlayWindow(errorText: String, onDismiss: () -> Unit) {
             )
         }
     }
-}@Composable
+}
+
+@Composable
 fun UndoScanDialog(
     onDismiss: () -> Unit,
     onUndoSuccess: (String) -> Unit
