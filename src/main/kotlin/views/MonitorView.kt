@@ -21,10 +21,6 @@ import models.Material
 import tools.ToggleButtonBox
 import viewModels.MaterialViewModel
 
-
-private const val FLASH_DURATION_MS = 2500L
-
-
 @Composable
 fun MonitorView(
     viewModel: MaterialViewModel,
@@ -33,29 +29,7 @@ fun MonitorView(
 
     val config = APPConfig
 
-    // Temporär gespeicherte Materialien, die empfangen wurden und noch angezeigt werden
-    val fakeNotInLager = remember { mutableStateListOf<Material>() }
-
-    val ausgegebeneMaterials = viewModel.materials.filter {
-        !it.inLager || fakeNotInLager.any { fake -> fake.id == it.id }
-    }
-
-// Update-Effekt: Wenn Material empfangen wird → kurz drin lassen
-    LaunchedEffect(viewModel.materials) {
-        val justReceived = viewModel.materials.filter { it.inLager }
-
-        justReceived.forEach { receivedMat ->
-            val alreadyInList = fakeNotInLager.any { it.id == receivedMat.id }
-            if (!alreadyInList) {
-                fakeNotInLager.add(receivedMat)
-
-                // Nach der Flash-Zeit wieder entfernen
-                delay(FLASH_DURATION_MS)
-                fakeNotInLager.remove(receivedMat)
-            }
-        }
-    }
-
+    val ausgegebeneMaterials = viewModel.materials.filter { !it.inLager }
 
     val bezeichnungsReihenfolge = config.bezeichnungsReihenfolge
 
@@ -159,7 +133,6 @@ fun MonitorView(
                                     MaterialBox(material, color, onMaterialSelected)
                                 }
                             }
-
 
 
 
@@ -383,27 +356,17 @@ fun MaterialBox(
     val cleanedSerial = material.seriennummer?.trimEnd() ?: ""
     val displaySerial = if (cleanedSerial.length > 6) cleanedSerial.takeLast(6) else cleanedSerial
 
-    // Zustand: true = "just updated", z. B. Ausgabe oder Empfang
+    // ✨ Flash-Animation bei Neuerscheinung
     var isFlashing by remember { mutableStateOf(true) }
 
-    // Welche Flashfarbe je nach Zustand?
-    val isEmpfangen = material.inLager
-    val flashBackground = if (isEmpfangen) Color.Black else Color(0xFFFFFF00) // Gelb
-    val flashText = if (isEmpfangen) Color.White else Color.Black
-
-    // Dynamische Farben
     val backgroundColor by animateColorAsState(
-        targetValue = if (isFlashing) flashBackground else color,
-        animationSpec = tween(durationMillis = FLASH_DURATION_MS.toInt())
-    )
-    val textColor by animateColorAsState(
-        targetValue = if (isFlashing) flashText else Color.Black,
-        animationSpec = tween(durationMillis = FLASH_DURATION_MS.toInt())
+        targetValue = if (isFlashing) Color.Yellow.copy(alpha = 0.7f) else color,
+        animationSpec = tween(durationMillis = 700)
     )
 
-    LaunchedEffect(material.id, material.inLager) {
-        isFlashing = true
-        delay(FLASH_DURATION_MS)
+    LaunchedEffect(Unit) {
+        // Nach kurzer Zeit normal einfärben
+        delay(700)
         isFlashing = false
     }
 
@@ -417,11 +380,9 @@ fun MaterialBox(
             .border(2.dp, Color.Gray, shape = MaterialTheme.shapes.medium),
         contentAlignment = Alignment.Center
     ) {
-        Text(displaySerial, style = MaterialTheme.typography.h5.copy(color = textColor))
+        Text(displaySerial, style = MaterialTheme.typography.h5)
     }
 }
-
-
 
 
 
