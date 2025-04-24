@@ -13,6 +13,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.key.*
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -121,269 +122,297 @@ fun ToolbarView(viewModel: MaterialViewModel, onNewMaterialClick: () -> Unit) {
 }
 
 
-// TODO SCAN DIALOG ---------------------------------
-@OptIn(ExperimentalComposeUiApi::class)
 @Composable
-fun ScanDialog(mode: String, viewModel: MaterialViewModel, onDismiss: () -> Unit) {
-    LaunchedEffect(mode) { viewModel.selectedMode = mode }
+fun ScanDialog(
+    mode: String,
+    viewModel: MaterialViewModel,
+    onDismiss: () -> Unit
+) {
+    // Set selected mode
+    LaunchedEffect(mode) {
+        viewModel.selectedMode = mode
+    }
 
+    // State holders
     var empfaenger by remember { mutableStateOf(viewModel.empfaengerName) }
     var abgeberName by remember { mutableStateOf("") }
     var seriennummer by remember { mutableStateOf("") }
     var notiz by remember { mutableStateOf("") }
-
     var showEmpfaengerWarning by remember { mutableStateOf(false) }
     var showAbgeberWarning by remember { mutableStateOf(false) }
 
+    // Focus requesters
     val focusSerial = remember { FocusRequester() }
     val focusEmpfaenger = remember { FocusRequester() }
     val focusAbgeber = remember { FocusRequester() }
 
+    // Scan log
     val log = remember { mutableStateListOf<String>() }
 
+    // Dialog size
     val dialogState = rememberDialogState(width = 1200.dp, height = 500.dp)
     var showUndoDialog by remember { mutableStateOf(false) }
 
-    DialogWindow(onCloseRequest = onDismiss, state = dialogState, title = "") {
+    // Determine colors
+    val backgroundColor = when (mode) {
+        "Ausgabe" -> Color(0xFFFFCDD2) // Light red
+        "Empfang" -> Color(0xFFC8E6C9) // Light green
+        else -> MaterialTheme.colors.surface
+    }
+
+    DialogWindow(
+        onCloseRequest = onDismiss,
+        state = dialogState,
+        title = ""
+    ) {
         Surface(
+            color = backgroundColor,
             modifier = Modifier
                 .fillMaxSize()
                 .padding(16.dp)
                 .focusable()
         ) {
-            Row(modifier = Modifier.fillMaxSize()) {
-                Column(modifier = Modifier.weight(1f)) {
+            Column(modifier = Modifier.fillMaxSize()) {
+                // Header
+                Text(
+                    text = mode.uppercase(),
+                    style = MaterialTheme.typography.h4,
+                    modifier = Modifier.padding(bottom = 16.dp)
+                )
 
-                    if (mode == "Empfang") {
-                        OutlinedTextField(
-                            value = abgeberName,
-                            onValueChange = {
-                                abgeberName = it
-                                showAbgeberWarning = false
-                            },
-                            label = { Text("Abgegeben von") },
-                            singleLine = true,
-                            isError = showAbgeberWarning,
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .focusRequester(focusAbgeber)
-                                .onPreviewKeyEvent {
-                                    if (it.key == Key.Enter && it.type == KeyEventType.KeyUp) {
-                                        if (abgeberName.isBlank()) showAbgeberWarning = true
-                                        else focusSerial.requestFocus()
-                                        true
-                                    } else false
-                                }
-                        )
-                        if (showAbgeberWarning) Text(
-                            "Bitte Name der abgebenden Person eingeben.",
-                            color = MaterialTheme.colors.error
-                        )
-                        Spacer(modifier = Modifier.height(8.dp))
-                    }
+                Row(modifier = Modifier.fillMaxSize()) {
+                    Column(modifier = Modifier.weight(1f)) {
 
-                    if (mode == "Ausgabe") {
-                        OutlinedTextField(
-                            value = empfaenger,
-                            onValueChange = {
-                                empfaenger = it
-                                showEmpfaengerWarning = false
-                            },
-                            label = { Text("Empfänger") },
-                            singleLine = true,
-                            isError = showEmpfaengerWarning,
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .focusRequester(focusEmpfaenger)
-                                .onPreviewKeyEvent {
-                                    if (it.key == Key.Enter && it.type == KeyEventType.KeyUp) {
-                                        if (empfaenger.isBlank()) showEmpfaengerWarning = true
-                                        else {
-                                            viewModel.empfaengerName = empfaenger
-                                            focusSerial.requestFocus()
-                                        }
-                                        true
-                                    } else false
-                                }
-                        )
-                        if (showEmpfaengerWarning) Text(
-                            "Empfänger darf nicht leer sein.",
-                            color = MaterialTheme.colors.error
-                        )
-                        Spacer(modifier = Modifier.height(8.dp))
-                    }
-
-                    OutlinedTextField(
-                        value = seriennummer,
-                        onValueChange = { seriennummer = it },
-                        label = { Text("Seriennummer") },
-                        singleLine = true,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .focusRequester(focusSerial)
-                            .onPreviewKeyEvent {
-                                if (it.key == Key.Enter && it.type == KeyEventType.KeyUp) {
-                                    if (seriennummer.isNotBlank()) {
-                                        if (mode == "Ausgabe" && empfaenger.isBlank()) {
-                                            showEmpfaengerWarning = true
-                                            focusEmpfaenger.requestFocus()
-                                        } else if (mode == "Empfang" && abgeberName.isBlank()) {
-                                            showAbgeberWarning = true
-                                            focusAbgeber.requestFocus()
-                                        } else {
-                                            viewModel.empfaengerName = empfaenger
-                                            val result = viewModel.processScan(seriennummer)
-                                            if (result != null && result.toString().trim().isNotEmpty()) {
-                                                log.add("$result SN $seriennummer")
-                                            } else {
-                                                // Fehler wurde im ViewModel behandelt (z.B. Warnung anzeigen)
-                                            }
-                                            seriennummer = ""
-                                            focusSerial.requestFocus()
-                                        }
+                        // Empfang mode: Abgeber eingeben
+                        if (mode == "Empfang") {
+                            OutlinedTextField(
+                                value = abgeberName,
+                                onValueChange = {
+                                    abgeberName = it
+                                    showAbgeberWarning = false
+                                },
+                                label = { Text("Abgegeben von") },
+                                singleLine = true,
+                                isError = showAbgeberWarning,
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .focusRequester(focusAbgeber)
+                                    .onPreviewKeyEvent {
+                                        if (it.key == Key.Enter && it.type == KeyEventType.KeyUp) {
+                                            if (abgeberName.isBlank()) showAbgeberWarning = true
+                                            else focusSerial.requestFocus()
+                                            true
+                                        } else false
                                     }
-                                    true
-                                } else false
-                            }
-                    )
+                            )
+                            if (showAbgeberWarning) Text(
+                                "Bitte Name der abgebenden Person eingeben.",
+                                color = MaterialTheme.colors.error
+                            )
+                            Spacer(modifier = Modifier.height(8.dp))
+                        }
 
-                    Spacer(modifier = Modifier.height(8.dp))
-
-                    OutlinedTextField(
-                        value = notiz,
-                        onValueChange = { notiz = it },
-                        label = { Text("Notiz") },
-                        modifier = Modifier.fillMaxWidth(),
-                        singleLine = false,
-                        maxLines = 3
-                    )
-
-                    Spacer(modifier = Modifier.height(16.dp))
-
-                    Row(horizontalArrangement = Arrangement.End, modifier = Modifier.fillMaxSize()) {
-
-                        Spacer(modifier = Modifier.width(8.dp))
-
-
-
+                        // Ausgabe mode: Empfaenger eingeben
                         if (mode == "Ausgabe") {
-                            Button(
-                                onClick = { showUndoDialog = true }
-                            ) {
-                                Text("RückScan")
+                            OutlinedTextField(
+                                value = empfaenger,
+                                onValueChange = {
+                                    empfaenger = it
+                                    showEmpfaengerWarning = false
+                                },
+                                label = { Text("Empfänger") },
+                                singleLine = true,
+                                isError = showEmpfaengerWarning,
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .focusRequester(focusEmpfaenger)
+                                    .onPreviewKeyEvent {
+                                        if (it.key == Key.Enter && it.type == KeyEventType.KeyUp) {
+                                            if (empfaenger.isBlank()) showEmpfaengerWarning = true
+                                            else {
+                                                viewModel.empfaengerName = empfaenger
+                                                focusSerial.requestFocus()
+                                            }
+                                            true
+                                        } else false
+                                    }
+                            )
+                            if (showEmpfaengerWarning) Text(
+                                "Empfänger darf nicht leer sein.",
+                                color = MaterialTheme.colors.error
+                            )
+                            Spacer(modifier = Modifier.height(8.dp))
+                        }
+
+                        // Seriennummer
+                        OutlinedTextField(
+                            value = seriennummer,
+                            onValueChange = { seriennummer = it },
+                            label = { Text("Seriennummer") },
+                            singleLine = true,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .focusRequester(focusSerial)
+                                .onPreviewKeyEvent {
+                                    if (it.key == Key.Enter && it.type == KeyEventType.KeyUp) {
+                                        if (seriennummer.isNotBlank()) {
+                                            if (mode == "Ausgabe" && empfaenger.isBlank()) {
+                                                showEmpfaengerWarning = true
+                                                focusEmpfaenger.requestFocus()
+                                            } else if (mode == "Empfang" && abgeberName.isBlank()) {
+                                                showAbgeberWarning = true
+                                                focusAbgeber.requestFocus()
+                                            } else {
+                                                viewModel.empfaengerName = empfaenger
+                                                val result = viewModel.processScan(seriennummer)
+                                                if (!result.isNullOrBlank()) {
+                                                    log.add("$result SN $seriennummer")
+                                                }
+                                                seriennummer = ""
+                                                focusSerial.requestFocus()
+                                            }
+                                        }
+                                        true
+                                    } else false
+                                }
+                        )
+
+                        Spacer(modifier = Modifier.height(8.dp))
+
+                        // Notiz
+                        OutlinedTextField(
+                            value = notiz,
+                            onValueChange = { notiz = it },
+                            label = { Text("Notiz") },
+                            modifier = Modifier.fillMaxWidth(),
+                            maxLines = 3
+                        )
+
+                        Spacer(modifier = Modifier.height(16.dp))
+
+                        // Buttons
+                        Row(
+                            horizontalArrangement = Arrangement.End,
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            if (mode == "Ausgabe") {
+                                Button(onClick = { showUndoDialog = true }) {
+                                    Text("RückScan")
+                                }
+                                Spacer(modifier = Modifier.width(8.dp))
+                            }
+
+                            Button(onClick = {
+                                val name = if (mode == "Ausgabe") empfaenger else abgeberName
+                                if (name.isBlank()) {
+                                    if (mode == "Ausgabe") showEmpfaengerWarning = true else showAbgeberWarning = true
+                                } else {
+                                    generateUebergabePdf(
+                                        empfaenger = name,
+                                        log = log.toList(),
+                                        modus = mode
+                                    )
+                                }
+                            }) {
+                                Text("Verlauf drucken")
                             }
 
                             Spacer(modifier = Modifier.width(8.dp))
-                        }
 
-
-                        Spacer(modifier = Modifier.width(8.dp))
-
-                        Button(onClick = {
-                            val name = if (mode == "Ausgabe") empfaenger else abgeberName
-                            if (name.isBlank()) {
-                                if (mode == "Ausgabe") showEmpfaengerWarning = true else showAbgeberWarning = true
-                            } else {
-                                generateUebergabePdf(
-                                    empfaenger = name,
-                                    log = log.toList(),
-                                    modus = mode
-                                )
-                            }
-                        }) {
-                            Text("Verlauf drucken")
-                        }
-
-                        Spacer(modifier = Modifier.width(8.dp))
-
-                        Button(onClick = {
-                            if ((mode == "Ausgabe" && empfaenger.isBlank()) || (mode == "Empfang" && abgeberName.isBlank())) {
-                                if (mode == "Ausgabe") showEmpfaengerWarning = true else showAbgeberWarning = true
-                            } else {
-                                onDismiss()
-                            }
-                        }) {
-                            Text("$mode beenden")
-                        }
-                    }
-                }
-
-                Spacer(modifier = Modifier.width(16.dp))
-
-                Column(
-                    modifier = Modifier
-                        .weight(1f)
-                        .fillMaxHeight()
-                ) {
-                    Text("Verlauf", style = MaterialTheme.typography.subtitle1)
-                    Spacer(modifier = Modifier.height(8.dp))
-                    val grouped = log.filter { it.contains("SN") }
-                        .groupBy { it.substringBefore(" SN") }
-                        .toSortedMap()
-
-                    LazyColumn(modifier = Modifier.fillMaxSize()) {
-                        grouped.forEach { (material, entries) ->
-                            item {
-                                Text(material, style = MaterialTheme.typography.subtitle1)
-                            }
-                            entries.asReversed().forEachIndexed { index, entry ->
-                                item {
-                                    Text("${entries.size - index}. $entry", style = MaterialTheme.typography.body2)
+                            Button(onClick = {
+                                val name = if (mode == "Ausgabe") empfaenger else abgeberName
+                                if (name.isBlank()) {
+                                    if (mode == "Ausgabe") showEmpfaengerWarning = true else showAbgeberWarning = true
+                                } else {
+                                    onDismiss()
                                 }
+                            }) {
+                                Text("$mode beenden")
                             }
-                            item { Spacer(modifier = Modifier.height(8.dp)) }
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.width(16.dp))
+
+                    // Verlauf anzeigen
+                    Column(
+                        modifier = Modifier
+                            .weight(1f)
+                            .fillMaxHeight()
+                    ) {
+                        Text("Verlauf", style = MaterialTheme.typography.subtitle1)
+                        Spacer(modifier = Modifier.height(8.dp))
+                        val grouped = log.filter { it.contains("SN") }
+                            .groupBy { it.substringBefore(" SN") }
+                            .toSortedMap()
+
+                        LazyColumn(modifier = Modifier.fillMaxSize()) {
+                            grouped.forEach { (material, entries) ->
+                                item {
+                                    Text(material, style = MaterialTheme.typography.subtitle1)
+                                }
+                                entries.asReversed().forEachIndexed { index, entry ->
+                                    item {
+                                        Text(
+                                            "${entries.size - index}. $entry",
+                                            style = MaterialTheme.typography.body2
+                                        )
+                                    }
+                                }
+                                item { Spacer(modifier = Modifier.height(8.dp)) }
+                            }
                         }
                     }
                 }
+            }
+        }
 
+        // Warn-Overlay
+        if (viewModel.showPopupWarning) {
+            ErrorOverlayWindow(
+                errorText = viewModel.popupWarningText,
+                onDismiss = {
+                    viewModel.showPopupWarning = false
+                    viewModel.popupWarningText = ""
+                }
+            )
+        }
+
+        // Undo-Dialog
+        if (showUndoDialog) {
+            UndoScanDialog(
+                onDismiss = { showUndoDialog = false },
+                onUndoSuccess = { sn ->
+                    val index = log.indexOfLast { it.contains("SN $sn") }
+                    if (index != -1) {
+                        log.removeAt(index)
+                        val success = viewModel.undoMaterialBySerial(sn)
+                        if (!success) {
+                            viewModel.popupWarningText = "Material mit Seriennummer '$sn' nicht gefunden."
+                            viewModel.showPopupWarning = true
+                        }
+                        showUndoDialog = false
+                    } else {
+                        viewModel.popupWarningText = "Eintrag mit Seriennummer '$sn' nicht im Verlauf gefunden."
+                        viewModel.showPopupWarning = true
+                        showUndoDialog = false
+                    }
+                }
+            )
+        }
+
+        // Initial focus
+        LaunchedEffect(Unit) {
+            delay(100)
+            when {
+                mode == "Ausgabe" && empfaenger.isBlank() -> focusEmpfaenger.requestFocus()
+                mode == "Empfang" && abgeberName.isBlank() -> focusAbgeber.requestFocus()
+                else -> focusSerial.requestFocus()
             }
         }
     }
-
-    // TODO SCAN DIALOG ---------------------------------
-    if (viewModel.showPopupWarning) {
-        ErrorOverlayWindow(
-            errorText = viewModel.popupWarningText,
-            onDismiss = {
-                viewModel.showPopupWarning = false
-                viewModel.popupWarningText = ""
-            }
-        )
-    }
-
-    if (showUndoDialog) {
-        UndoScanDialog(
-            onDismiss = { showUndoDialog = false },
-            onUndoSuccess = { sn ->
-                val index = log.indexOfLast { it.contains("SN $sn") }
-                if (index != -1) {
-                    log.removeAt(index)
-
-                    // ✅ NEU: DB-Update via ViewModel
-                    val success = viewModel.undoMaterialBySerial(sn)
-                    if (!success) {
-                        viewModel.popupWarningText = "Material mit Seriennummer '$sn' nicht gefunden."
-                        viewModel.showPopupWarning = true
-                    }
-
-                    showUndoDialog = false
-                } else {
-                    viewModel.popupWarningText = "Eintrag mit Seriennummer '$sn' nicht im Verlauf gefunden."
-                    viewModel.showPopupWarning = true
-                    showUndoDialog = false
-                }
-            }
-        )
-    }
-
-
-    LaunchedEffect(Unit) {
-        delay(100)
-        if (mode == "Ausgabe" && empfaenger.isBlank()) focusEmpfaenger.requestFocus()
-        else if (mode == "Empfang" && abgeberName.isBlank()) focusAbgeber.requestFocus()
-        else focusSerial.requestFocus()
-    }
 }
+
 
 @Composable
 fun ErrorOverlayWindow(errorText: String, onDismiss: () -> Unit) {
