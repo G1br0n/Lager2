@@ -122,18 +122,15 @@ fun ToolbarView(viewModel: MaterialViewModel, onNewMaterialClick: () -> Unit) {
 }
 
 
+@OptIn(ExperimentalComposeUiApi::class)
 @Composable
 fun ScanDialog(
     mode: String,
     viewModel: MaterialViewModel,
     onDismiss: () -> Unit
 ) {
-    // Set selected mode
-    LaunchedEffect(mode) {
-        viewModel.selectedMode = mode
-    }
+    LaunchedEffect(mode) { viewModel.selectedMode = mode }
 
-    // State holders
     var empfaenger by remember { mutableStateOf(viewModel.empfaengerName) }
     var abgeberName by remember { mutableStateOf("") }
     var seriennummer by remember { mutableStateOf("") }
@@ -141,30 +138,22 @@ fun ScanDialog(
     var showEmpfaengerWarning by remember { mutableStateOf(false) }
     var showAbgeberWarning by remember { mutableStateOf(false) }
 
-    // Focus requesters
     val focusSerial = remember { FocusRequester() }
     val focusEmpfaenger = remember { FocusRequester() }
     val focusAbgeber = remember { FocusRequester() }
 
-    // Scan log
     val log = remember { mutableStateListOf<String>() }
-
-    // Dialog size
     val dialogState = rememberDialogState(width = 1200.dp, height = 500.dp)
     var showUndoDialog by remember { mutableStateOf(false) }
 
-    // Determine colors
+    // Hintergrundfarbe wählen
     val backgroundColor = when (mode) {
-        "Ausgabe" -> Color(0xFFFFCDD2) // Light red
-        "Empfang" -> Color(0xFFC8E6C9) // Light green
+        "Ausgabe" -> Color(0xFFFFCDD2) // Hellrot
+        "Empfang" -> Color(0xFFC8E6C9) // Hellgrün
         else -> MaterialTheme.colors.surface
     }
 
-    DialogWindow(
-        onCloseRequest = onDismiss,
-        state = dialogState,
-        title = ""
-    ) {
+    DialogWindow(onCloseRequest = onDismiss, state = dialogState, title = "") {
         Surface(
             color = backgroundColor,
             modifier = Modifier
@@ -173,17 +162,17 @@ fun ScanDialog(
                 .focusable()
         ) {
             Column(modifier = Modifier.fillMaxSize()) {
-                // Header
+                // Große Überschrift
                 Text(
                     text = mode.uppercase(),
                     style = MaterialTheme.typography.h4,
-                    modifier = Modifier.padding(bottom = 16.dp)
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(bottom = 16.dp)
                 )
 
                 Row(modifier = Modifier.fillMaxSize()) {
                     Column(modifier = Modifier.weight(1f)) {
-
-                        // Empfang mode: Abgeber eingeben
                         if (mode == "Empfang") {
                             OutlinedTextField(
                                 value = abgeberName,
@@ -212,7 +201,6 @@ fun ScanDialog(
                             Spacer(modifier = Modifier.height(8.dp))
                         }
 
-                        // Ausgabe mode: Empfaenger eingeben
                         if (mode == "Ausgabe") {
                             OutlinedTextField(
                                 value = empfaenger,
@@ -244,7 +232,6 @@ fun ScanDialog(
                             Spacer(modifier = Modifier.height(8.dp))
                         }
 
-                        // Seriennummer
                         OutlinedTextField(
                             value = seriennummer,
                             onValueChange = { seriennummer = it },
@@ -279,7 +266,6 @@ fun ScanDialog(
 
                         Spacer(modifier = Modifier.height(8.dp))
 
-                        // Notiz
                         OutlinedTextField(
                             value = notiz,
                             onValueChange = { notiz = it },
@@ -290,7 +276,6 @@ fun ScanDialog(
 
                         Spacer(modifier = Modifier.height(16.dp))
 
-                        // Buttons
                         Row(
                             horizontalArrangement = Arrangement.End,
                             modifier = Modifier.fillMaxWidth()
@@ -305,13 +290,10 @@ fun ScanDialog(
                             Button(onClick = {
                                 val name = if (mode == "Ausgabe") empfaenger else abgeberName
                                 if (name.isBlank()) {
-                                    if (mode == "Ausgabe") showEmpfaengerWarning = true else showAbgeberWarning = true
+                                    if (mode == "Ausgabe") showEmpfaengerWarning = true
+                                    else showAbgeberWarning = true
                                 } else {
-                                    generateUebergabePdf(
-                                        empfaenger = name,
-                                        log = log.toList(),
-                                        modus = mode
-                                    )
+                                    generateUebergabePdf(empfaenger = name, log = log.toList(), modus = mode)
                                 }
                             }) {
                                 Text("Verlauf drucken")
@@ -322,7 +304,8 @@ fun ScanDialog(
                             Button(onClick = {
                                 val name = if (mode == "Ausgabe") empfaenger else abgeberName
                                 if (name.isBlank()) {
-                                    if (mode == "Ausgabe") showEmpfaengerWarning = true else showAbgeberWarning = true
+                                    if (mode == "Ausgabe") showEmpfaengerWarning = true
+                                    else showAbgeberWarning = true
                                 } else {
                                     onDismiss()
                                 }
@@ -334,7 +317,6 @@ fun ScanDialog(
 
                     Spacer(modifier = Modifier.width(16.dp))
 
-                    // Verlauf anzeigen
                     Column(
                         modifier = Modifier
                             .weight(1f)
@@ -342,21 +324,17 @@ fun ScanDialog(
                     ) {
                         Text("Verlauf", style = MaterialTheme.typography.subtitle1)
                         Spacer(modifier = Modifier.height(8.dp))
-                        val grouped = log.filter { it.contains("SN") }
+                        val grouped = log
+                            .filter { it.contains("SN") }
                             .groupBy { it.substringBefore(" SN") }
                             .toSortedMap()
 
                         LazyColumn(modifier = Modifier.fillMaxSize()) {
                             grouped.forEach { (material, entries) ->
-                                item {
-                                    Text(material, style = MaterialTheme.typography.subtitle1)
-                                }
+                                item { Text(material, style = MaterialTheme.typography.subtitle1) }
                                 entries.asReversed().forEachIndexed { index, entry ->
                                     item {
-                                        Text(
-                                            "${entries.size - index}. $entry",
-                                            style = MaterialTheme.typography.body2
-                                        )
+                                        Text("${entries.size - index}. $entry", style = MaterialTheme.typography.body2)
                                     }
                                 }
                                 item { Spacer(modifier = Modifier.height(8.dp)) }
@@ -367,7 +345,6 @@ fun ScanDialog(
             }
         }
 
-        // Warn-Overlay
         if (viewModel.showPopupWarning) {
             ErrorOverlayWindow(
                 errorText = viewModel.popupWarningText,
@@ -378,7 +355,6 @@ fun ScanDialog(
             )
         }
 
-        // Undo-Dialog
         if (showUndoDialog) {
             UndoScanDialog(
                 onDismiss = { showUndoDialog = false },
@@ -391,17 +367,15 @@ fun ScanDialog(
                             viewModel.popupWarningText = "Material mit Seriennummer '$sn' nicht gefunden."
                             viewModel.showPopupWarning = true
                         }
-                        showUndoDialog = false
                     } else {
                         viewModel.popupWarningText = "Eintrag mit Seriennummer '$sn' nicht im Verlauf gefunden."
                         viewModel.showPopupWarning = true
-                        showUndoDialog = false
                     }
+                    showUndoDialog = false
                 }
             )
         }
 
-        // Initial focus
         LaunchedEffect(Unit) {
             delay(100)
             when {
