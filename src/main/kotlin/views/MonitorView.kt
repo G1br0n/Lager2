@@ -82,18 +82,18 @@ fun MonitorView(
                         modifier = Modifier
                             .padding(2.dp)
                             .fillMaxHeight()
-                            .width(200.dp)
+                            .width(140.dp)
                             .border(1.dp, Color.LightGray),
                         horizontalAlignment = Alignment.CenterHorizontally
                     ) {
                         item {
-                            Text(bezeichnung, style = MaterialTheme.typography.h5)
+                            Text(bezeichnung, style = MaterialTheme.typography.h6)
                             Spacer(modifier = Modifier.height(2.dp))
-                            Text("$totalCount", color = darkGreen, style = MaterialTheme.typography.h5)
+                            Text("$totalCount", color = darkGreen, style = MaterialTheme.typography.h3)
                             Row(verticalAlignment = Alignment.CenterVertically) {
-                                Text("$inLagerCount", color = blue, style = MaterialTheme.typography.h5)
-                                Text(" / ", style = MaterialTheme.typography.h5)
-                                Text("$notInLagerCount", color = red, style = MaterialTheme.typography.h5)
+                                Text("$inLagerCount", color = blue, style = MaterialTheme.typography.h3)
+                                Text(" / ", style = MaterialTheme.typography.h4)
+                                Text("$notInLagerCount", color = red, style = MaterialTheme.typography.h3)
                             }
                             Spacer(modifier = Modifier.height(4.dp))
                         }
@@ -117,7 +117,7 @@ fun MonitorView(
                                     Text(
                                         position,
                                         modifier = Modifier.padding(2.dp),
-                                        style = MaterialTheme.typography.subtitle2
+                                        style = MaterialTheme.typography.caption
                                     )
                                 }
                                 Spacer(modifier = Modifier.height(1.dp))
@@ -373,14 +373,14 @@ fun MaterialBox(
     Box(
         modifier = Modifier
             .fillMaxWidth()
-            .height(50.dp)
+            .height(35.dp)
             .padding(horizontal = 3.dp, vertical = 2.dp)
             .clickable { onClick(material) }
             .background(backgroundColor, shape = MaterialTheme.shapes.medium)
             .border(2.dp, Color.Gray, shape = MaterialTheme.shapes.medium),
         contentAlignment = Alignment.Center
     ) {
-        Text(displaySerial, style = MaterialTheme.typography.h5)
+        Text(displaySerial, style = MaterialTheme.typography.body1)
     }
 }
 
@@ -426,8 +426,6 @@ fun BezeichnungCheckboxList(
                         )
                     }
                 )
-
-
             }
         }
     }
