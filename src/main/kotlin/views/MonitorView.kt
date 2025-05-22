@@ -87,7 +87,7 @@ fun MonitorView(
                         horizontalAlignment = Alignment.CenterHorizontally
                     ) {
                         item {
-                            Text(bezeichnung, style = MaterialTheme.typography.h6)
+                            Text(bezeichnung, style = MaterialTheme.typography.body1)
                             Spacer(modifier = Modifier.height(2.dp))
                             Text("$totalCount", color = darkGreen, style = MaterialTheme.typography.h3)
                             Row(verticalAlignment = Alignment.CenterVertically) {

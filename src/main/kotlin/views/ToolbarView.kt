@@ -2,10 +2,15 @@ package views
 
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
+import androidx.compose.foundation.background
 import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.*
+import androidx.compose.material.icons.Icons
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.ExperimentalComposeUiApi
@@ -13,9 +18,12 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.key.*
+import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.*
@@ -25,80 +33,139 @@ import viewModels.MaterialViewModel
 
 
 // TODO --------------------------------- ToolbarView ---------------------------------
+
+@OptIn(ExperimentalComposeUiApi::class)
 @Composable
-fun ToolbarView(viewModel: MaterialViewModel, onNewMaterialClick: () -> Unit) {
+fun ToolbarView(
+    viewModel: MaterialViewModel,
+    onNewMaterialClick: () -> Unit
+) {
     var showDialog by remember { mutableStateOf<String?>(null) }
     var showPasswordDialog by remember { mutableStateOf(false) }
 
+    // Scanner-Puffer und FocusRequester
+    var scannerBuffer by remember { mutableStateOf("") }
+    val toolbarFocusRequester = remember { FocusRequester() }
 
-    // TODO --------------------------------- Empfang/Ausgabe Button ---------------------------------
+    // Fokus auf Toolbar, wenn keine Dialoge offen
+    LaunchedEffect(showDialog, showPasswordDialog) {
+        if (showDialog == null && !showPasswordDialog) {
+            toolbarFocusRequester.requestFocus()
+        }
+    }
+
     Row(
-        modifier = Modifier.fillMaxWidth().padding(vertical = 12.dp),
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 12.dp)
+            .focusRequester(toolbarFocusRequester)
+            .focusable()
+            .onPreviewKeyEvent { event ->
+                if (event.type == KeyEventType.KeyUp) {
+                    when {
+                        // Enter schließt Puffer ab und öffnet ggf. Dialog
+                        event.key == Key.Enter -> {
+                            when (scannerBuffer.trim().uppercase()) {
+                                "EMPFANG" -> {
+                                    viewModel.selectedMode = "Empfang"
+                                    showDialog = "Empfang"
+                                    viewModel.playEmpfangModusTone()
+                                }
+                                "AUSGABE" -> {
+                                    viewModel.selectedMode = "Ausgabe"
+                                    showDialog = "Ausgabe"
+                                    viewModel.playAusgabeModusTone()
+                                }
+                                else -> {
+                                    // Fallback: könnte als Seriennummer interpretiert werden
+                                }
+                            }
+                            scannerBuffer = ""
+                            true
+                        }
+                        else -> {
+                            // Nur druckbare Zeichen anpuffern
+                            event.utf16CodePoint.takeIf { it in 32..126 }
+                                ?.toChar()
+                                ?.also { scannerBuffer += it }
+                                ?.let { return@onPreviewKeyEvent true }
+                            false
+                        }
+                    }
+                } else false
+            },
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.SpaceBetween
     ) {
+        // Empfang / Ausgabe Buttons
         Row(verticalAlignment = Alignment.CenterVertically) {
             Button(
                 onClick = {
                     viewModel.selectedMode = "Empfang"
                     showDialog = "Empfang"
+                    viewModel.playEmpfangModusTone()
                 },
-                modifier = Modifier.height(48.dp).padding(horizontal = 4.dp)
+                modifier = Modifier.padding(horizontal = 4.dp)
             ) {
                 Text("Empfang", fontSize = 18.sp, fontWeight = FontWeight.Bold)
             }
-
-            Spacer(modifier = Modifier.width(12.dp))
-
+            Spacer(Modifier.width(8.dp))
             Button(
                 onClick = {
                     viewModel.selectedMode = "Ausgabe"
                     showDialog = "Ausgabe"
+                    viewModel.playAusgabeModusTone()
                 },
-                modifier = Modifier.height(48.dp).padding(horizontal = 4.dp)
+                modifier = Modifier.padding(horizontal = 4.dp)
             ) {
                 Text("Ausgabe", fontSize = 18.sp, fontWeight = FontWeight.Bold)
             }
+
         }
 
-        // TODO --------------------------------- FILTER ---------------------------------
+        // Filter-Bereich
         Row(
             verticalAlignment = Alignment.CenterVertically,
-            modifier = Modifier.weight(1f).padding(horizontal = 16.dp)
+            modifier = Modifier
+                .weight(1f)
+                .padding(horizontal = 16.dp)
         ) {
+            // Filter-Textfeld
+            val filterFocusRequester = remember { FocusRequester() }
             OutlinedTextField(
                 value = viewModel.filterText,
                 onValueChange = { viewModel.filterText = it },
                 label = { Text("Filter", fontSize = 16.sp) },
-                modifier = Modifier.weight(1f)
+                singleLine = true,
+                modifier = Modifier
+                    .weight(1f)
+                    .focusRequester(filterFocusRequester)
+                    .focusable(),
+                keyboardOptions = KeyboardOptions.Default,
+                keyboardActions = KeyboardActions(onDone = { /* optional */ })
             )
-            Spacer(modifier = Modifier.width(12.dp))
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier.wrapContentWidth()
-            ) {
-                Checkbox(
-                    checked = viewModel.filterActive,
-                    onCheckedChange = {
-                        viewModel.filterActive = it
-                    }
-                )
-                Spacer(modifier = Modifier.width(4.dp))
-                Text(
-                    if (viewModel.filterActive) "Filter AN" else "Filter AUS",
-                    fontSize = 16.sp
-                )
-            }
+            Spacer(Modifier.width(8.dp))
+            Checkbox(
+                checked = viewModel.filterActive,
+                onCheckedChange = { viewModel.filterActive = it }
+            )
+            Text(
+                text = if (viewModel.filterActive) "Filter AN" else "Filter AUS",
+                fontSize = 16.sp,
+                modifier = Modifier.padding(start = 4.dp)
+            )
         }
-        // TODO --------------------------------- Neu ---------------------------------
+
+        // "Neu"-Button mit Passwort-Prompt
         Button(
             onClick = { showPasswordDialog = true },
-            modifier = Modifier.height(48.dp).padding(horizontal = 4.dp)
+            modifier = Modifier.padding(horizontal = 4.dp)
         ) {
             Text("Neu", fontSize = 18.sp, fontWeight = FontWeight.Bold)
         }
     }
 
+    // Dialog-Fenster für Empfang/Ausgabe
     showDialog?.let { mode ->
         ScanDialog(
             mode = mode,
@@ -107,19 +174,21 @@ fun ToolbarView(viewModel: MaterialViewModel, onNewMaterialClick: () -> Unit) {
         )
     }
 
-    // TODO --------------------------------- PASSWORT ---------------------------------
+    // Passwort-Abfrage für "Neu"
     if (showPasswordDialog) {
         PasswordPrompt(
-            onConfirm = {
-                if (it == "test") {
-                    onNewMaterialClick()
-                }
+            onConfirm = { pwd ->
+                if (pwd == "test") onNewMaterialClick()
                 showPasswordDialog = false
             },
             onCancel = { showPasswordDialog = false }
         )
     }
 }
+
+
+
+
 
 
 @OptIn(ExperimentalComposeUiApi::class)
@@ -131,12 +200,20 @@ fun ScanDialog(
 ) {
     LaunchedEffect(mode) { viewModel.selectedMode = mode }
 
-    var empfaenger by remember { mutableStateOf(viewModel.empfaengerName) }
-    var abgeberName by remember { mutableStateOf("") }
+    // State for Empfänger/Abgeber-Feld mit TextFieldValue
+    var empfaengerState by remember {
+        mutableStateOf(
+            TextFieldValue(
+                text = viewModel.empfaengerName,
+                selection = TextRange(0, viewModel.empfaengerName.length)
+            )
+        )
+    }
     var seriennummer by remember { mutableStateOf("") }
     var notiz by remember { mutableStateOf("") }
     var showEmpfaengerWarning by remember { mutableStateOf(false) }
     var showAbgeberWarning by remember { mutableStateOf(false) }
+    var showUndoDialog by remember { mutableStateOf(false) }
 
     val focusSerial = remember { FocusRequester() }
     val focusEmpfaenger = remember { FocusRequester() }
@@ -144,94 +221,76 @@ fun ScanDialog(
 
     val log = remember { mutableStateListOf<String>() }
     val dialogState = rememberDialogState(width = 1200.dp, height = 500.dp)
-    var showUndoDialog by remember { mutableStateOf(false) }
 
-    // Hintergrundfarbe wählen
-    val backgroundColor = when (mode) {
-        "Ausgabe" -> Color(0xFFFFCDD2) // Hellrot
-        "Empfang" -> Color(0xFFC8E6C9) // Hellgrün
-        else -> MaterialTheme.colors.surface
+    // Initial focus & selection
+    LaunchedEffect(Unit) {
+        delay(100)
+        when (mode) {
+            "Ausgabe" -> focusEmpfaenger.requestFocus()
+            "Empfang" -> focusAbgeber.requestFocus()
+            else -> focusSerial.requestFocus()
+        }
     }
 
     DialogWindow(onCloseRequest = onDismiss, state = dialogState, title = "") {
         Surface(
-            color = backgroundColor,
+            color = if (mode == "Ausgabe") Color(0xFFFFCDD2) else Color(0xFFC8E6C9),
             modifier = Modifier
                 .fillMaxSize()
                 .padding(16.dp)
                 .focusable()
         ) {
             Column(modifier = Modifier.fillMaxSize()) {
-                // Große Überschrift
-                Text(
-                    text = mode.uppercase(),
-                    style = MaterialTheme.typography.h4,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(bottom = 16.dp)
-                )
+                Text(text = mode.uppercase(), style = MaterialTheme.typography.h4, modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(bottom = 16.dp))
 
                 Row(modifier = Modifier.fillMaxSize()) {
                     Column(modifier = Modifier.weight(1f)) {
-                        if (mode == "Empfang") {
-                            OutlinedTextField(
-                                value = abgeberName,
-                                onValueChange = {
-                                    abgeberName = it
-                                    showAbgeberWarning = false
-                                },
-                                label = { Text("Abgegeben von") },
-                                singleLine = true,
-                                isError = showAbgeberWarning,
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .focusRequester(focusAbgeber)
-                                    .onPreviewKeyEvent {
-                                        if (it.key == Key.Enter && it.type == KeyEventType.KeyUp) {
-                                            if (abgeberName.isBlank()) showAbgeberWarning = true
-                                            else focusSerial.requestFocus()
-                                            true
-                                        } else false
+                        // Empfänger / Abgeber Field
+                        OutlinedTextField(
+                            value = empfaengerState,
+                            onValueChange = { newValue ->
+                                empfaengerState = newValue
+                                // Aktualisiere ViewModel sofort
+                                viewModel.empfaengerName = newValue.text
+                                showEmpfaengerWarning = false
+                                showAbgeberWarning = false
+                            },
+                            label = { Text(if (mode == "Ausgabe") "Empfänger" else "Abgegeben von") },
+                            singleLine = true,
+                            isError = if (mode == "Ausgabe") showEmpfaengerWarning else showAbgeberWarning,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .focusRequester(if (mode == "Ausgabe") focusEmpfaenger else focusAbgeber)
+                                .onFocusChanged { focusState ->
+                                    if (focusState.isFocused) {
+                                        empfaengerState = empfaengerState.copy(
+                                            selection = TextRange(0, empfaengerState.text.length)
+                                        )
                                     }
-                            )
-                            if (showAbgeberWarning) Text(
-                                "Bitte Name der abgebenden Person eingeben.",
+                                }
+                                .onPreviewKeyEvent { event ->
+                                    if (event.key == Key.Enter && event.type == KeyEventType.KeyUp) {
+                                        if (empfaengerState.text.isBlank()) {
+                                            if (mode == "Ausgabe") showEmpfaengerWarning = true else showAbgeberWarning = true
+                                        } else {
+                                            focusSerial.requestFocus()
+                                        }
+                                        true
+                                    } else false
+                                }
+                        )
+                        if ((mode == "Ausgabe" && showEmpfaengerWarning) || (mode == "Empfang" && showAbgeberWarning)) {
+                            Text(
+                                text = if (mode == "Ausgabe") "Empfänger darf nicht leer sein." else "Bitte Name der abgebenden Person eingeben.",
                                 color = MaterialTheme.colors.error
                             )
-                            Spacer(modifier = Modifier.height(8.dp))
                         }
 
-                        if (mode == "Ausgabe") {
-                            OutlinedTextField(
-                                value = empfaenger,
-                                onValueChange = {
-                                    empfaenger = it
-                                    showEmpfaengerWarning = false
-                                },
-                                label = { Text("Empfänger") },
-                                singleLine = true,
-                                isError = showEmpfaengerWarning,
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .focusRequester(focusEmpfaenger)
-                                    .onPreviewKeyEvent {
-                                        if (it.key == Key.Enter && it.type == KeyEventType.KeyUp) {
-                                            if (empfaenger.isBlank()) showEmpfaengerWarning = true
-                                            else {
-                                                viewModel.empfaengerName = empfaenger
-                                                focusSerial.requestFocus()
-                                            }
-                                            true
-                                        } else false
-                                    }
-                            )
-                            if (showEmpfaengerWarning) Text(
-                                "Empfänger darf nicht leer sein.",
-                                color = MaterialTheme.colors.error
-                            )
-                            Spacer(modifier = Modifier.height(8.dp))
-                        }
+                        Spacer(modifier = Modifier.height(8.dp))
 
+                        // Seriennummer Field
                         OutlinedTextField(
                             value = seriennummer,
                             onValueChange = { seriennummer = it },
@@ -240,24 +299,15 @@ fun ScanDialog(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .focusRequester(focusSerial)
-                                .onPreviewKeyEvent {
-                                    if (it.key == Key.Enter && it.type == KeyEventType.KeyUp) {
+                                .onPreviewKeyEvent { event ->
+                                    if (event.key == Key.Enter && event.type == KeyEventType.KeyUp) {
                                         if (seriennummer.isNotBlank()) {
-                                            if (mode == "Ausgabe" && empfaenger.isBlank()) {
-                                                showEmpfaengerWarning = true
-                                                focusEmpfaenger.requestFocus()
-                                            } else if (mode == "Empfang" && abgeberName.isBlank()) {
-                                                showAbgeberWarning = true
-                                                focusAbgeber.requestFocus()
-                                            } else {
-                                                viewModel.empfaengerName = empfaenger
-                                                val result = viewModel.processScan(seriennummer)
-                                                if (!result.isNullOrBlank()) {
-                                                    log.add("$result SN $seriennummer")
-                                                }
-                                                seriennummer = ""
-                                                focusSerial.requestFocus()
-                                            }
+                                            // name aus empfaengerState
+                                            val name = empfaengerState.text
+                                            val result = viewModel.processScan(seriennummer)
+                                            if (!result.isNullOrBlank()) log.add("$result SN $seriennummer")
+                                            seriennummer = ""
+                                            focusSerial.requestFocus()
                                         }
                                         true
                                     } else false
@@ -266,6 +316,7 @@ fun ScanDialog(
 
                         Spacer(modifier = Modifier.height(8.dp))
 
+                        // Notiz Field
                         OutlinedTextField(
                             value = notiz,
                             onValueChange = { notiz = it },
@@ -281,46 +332,33 @@ fun ScanDialog(
                             modifier = Modifier.fillMaxWidth()
                         ) {
                             if (mode == "Ausgabe") {
-                                Button(onClick = { showUndoDialog = true }) {
-                                    Text("RückScan")
-                                }
+                                Button(onClick = { showUndoDialog = true }) { Text("RückScan") }
                                 Spacer(modifier = Modifier.width(8.dp))
                             }
-
                             Button(onClick = {
-                                val name = if (mode == "Ausgabe") empfaenger else abgeberName
+                                val name = empfaengerState.text
                                 if (name.isBlank()) {
-                                    if (mode == "Ausgabe") showEmpfaengerWarning = true
-                                    else showAbgeberWarning = true
+                                    if (mode == "Ausgabe") showEmpfaengerWarning = true else showAbgeberWarning = true
                                 } else {
                                     generateUebergabePdf(empfaenger = name, log = log.toList(), modus = mode)
                                 }
-                            }) {
-                                Text("Verlauf drucken")
-                            }
-
+                            }) { Text("Verlauf drucken") }
                             Spacer(modifier = Modifier.width(8.dp))
-
                             Button(onClick = {
-                                val name = if (mode == "Ausgabe") empfaenger else abgeberName
+                                val name = empfaengerState.text
                                 if (name.isBlank()) {
-                                    if (mode == "Ausgabe") showEmpfaengerWarning = true
-                                    else showAbgeberWarning = true
+                                    if (mode == "Ausgabe") showEmpfaengerWarning = true else showAbgeberWarning = true
                                 } else {
                                     onDismiss()
                                 }
-                            }) {
-                                Text("$mode beenden")
-                            }
+                            }) { Text("$mode beenden") }
                         }
                     }
 
                     Spacer(modifier = Modifier.width(16.dp))
 
                     Column(
-                        modifier = Modifier
-                            .weight(1f)
-                            .fillMaxHeight()
+                        modifier = Modifier.weight(1f).fillMaxHeight()
                     ) {
                         Text("Verlauf", style = MaterialTheme.typography.subtitle1)
                         Spacer(modifier = Modifier.height(8.dp))
@@ -333,9 +371,7 @@ fun ScanDialog(
                             grouped.forEach { (material, entries) ->
                                 item { Text(material, style = MaterialTheme.typography.subtitle1) }
                                 entries.asReversed().forEachIndexed { index, entry ->
-                                    item {
-                                        Text("${entries.size - index}. $entry", style = MaterialTheme.typography.body2)
-                                    }
+                                    item { Text("${entries.size - index}. $entry", style = MaterialTheme.typography.body2) }
                                 }
                                 item { Spacer(modifier = Modifier.height(8.dp)) }
                             }
@@ -365,6 +401,7 @@ fun ScanDialog(
                         val success = viewModel.undoMaterialBySerial(sn)
                         if (!success) {
                             viewModel.popupWarningText = "Material mit Seriennummer '$sn' nicht gefunden."
+                            viewModel.playNichtErkanntTone()
                             viewModel.showPopupWarning = true
                         }
                     } else {
@@ -375,17 +412,9 @@ fun ScanDialog(
                 }
             )
         }
-
-        LaunchedEffect(Unit) {
-            delay(100)
-            when {
-                mode == "Ausgabe" && empfaenger.isBlank() -> focusEmpfaenger.requestFocus()
-                mode == "Empfang" && abgeberName.isBlank() -> focusAbgeber.requestFocus()
-                else -> focusSerial.requestFocus()
-            }
-        }
     }
 }
+
 
 
 @Composable

@@ -13,6 +13,10 @@ import models.Material
 import repositorys.SQLiteMaterialRepository
 import viewModels.MaterialViewModel
 import views.*
+import java.awt.AWTEvent
+import java.awt.Toolkit
+import java.awt.event.KeyEvent
+import javax.swing.SwingUtilities
 
 @OptIn(ExperimentalComposeUiApi::class)
 @Composable
@@ -106,6 +110,14 @@ fun main() = application {
     var selectedMaterialForMonitor by remember { mutableStateOf<Material?>(null) }
     val selectedMonitor = selectedMaterialForMonitor
 
+    Toolkit.getDefaultToolkit().addAWTEventListener({ event ->
+        if (event is KeyEvent && event.id == KeyEvent.KEY_RELEASED) {
+            // Auf UI-Thread weiterreichen, um State sicher zu updaten
+            SwingUtilities.invokeLater {
+                viewModel.onGlobalKey(event)
+            }
+        }
+    }, AWTEvent.KEY_EVENT_MASK)
     // 🪟 Hauptfenster
     Window(onCloseRequest = ::exitApplication, title = "Lagerverwaltung (MVVM & Grautöne)") {
         App(viewModel)

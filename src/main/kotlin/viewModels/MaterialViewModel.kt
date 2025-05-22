@@ -9,6 +9,7 @@ import javazoom.jl.player.advanced.AdvancedPlayer
 import models.Material
 import models.MaterialLog
 import repositorys.MaterialRepository
+import java.awt.event.KeyEvent
 import java.time.LocalDateTime
 
 // ----------------------------
@@ -29,7 +30,7 @@ class MaterialViewModel(private val repository: MaterialRepository) {
     var popupWarningText by mutableStateOf("")
     var filterText by mutableStateOf("")
     var filterActive by mutableStateOf(false)
-
+    private var globalScannerBuffer by mutableStateOf("")
     val filteredMaterials: List<Material>
         get() = if (!filterActive || filterText.isBlank()) {
             materials
@@ -40,7 +41,41 @@ class MaterialViewModel(private val repository: MaterialRepository) {
                         it.position?.contains(filterText, ignoreCase = true) == true
             }
         }
+    var focusModeActive by mutableStateOf(false)
+        private set
 
+    fun toggleFocusMode() {
+        focusModeActive = !focusModeActive
+    }
+
+
+    // Buffer für Scanner-Eingaben
+
+
+    /**
+     * Wird aus dem AWTEventListener aufgerufen.
+     */
+    fun onGlobalKey(event: KeyEvent) {
+        val c = event.keyChar
+        when {
+            c in ' '..'~' -> {
+                // druckbares Zeichen → anpuffern
+                globalScannerBuffer += c
+            }
+            event.keyCode == KeyEvent.VK_ENTER -> {
+                // Enter → verarbeiten und leeren
+                handleGlobalScan(globalScannerBuffer.trim())
+                globalScannerBuffer = ""
+            }
+        }
+    }
+
+    private fun handleGlobalScan(code: String) {
+        // hier kannst du processScan oder eigene Logik nutzen
+        if (code.isNotEmpty()) {
+            processScan(code)
+        }
+    }
     fun processScan(scannedCode: String): String? {
         val code = scannedCode.trim()
         val found = materials.find { it.seriennummer?.trim()?.startsWith(code) == true }
@@ -48,17 +83,19 @@ class MaterialViewModel(private val repository: MaterialRepository) {
         if (found != null) {
             // Fall 1: Empfang & schon im Lager
             if (selectedMode == "Empfang" && found.inLager) {
-                popupWarningText = "„${found.bezeichnung ?: "Unbekannt"}“ im Lager. \n Materiel Empfangen"
+                popupWarningText = "„${found.bezeichnung ?: "Unbekannt"}“ ist berets im Lager."
                 showPopupWarning = true
                 playErrorTone()
+                playImLagerTone()
                 return null
             }
 
             // Fall 2: Ausgabe & nicht im Lager
             if (selectedMode == "Ausgabe" && !found.inLager) {
-                popupWarningText = "„${found.bezeichnung ?: "Unbekannt"}“ NICHT im Lager."
+                popupWarningText = "„${found.bezeichnung ?: "Unbekannt"}“ NICHT im Lager. \n Befindet sich bei ${found.position}"
                 showPopupWarning = true
                 playErrorTone()
+                playNichtImLagerTone()
                 return null
             }
 
@@ -95,6 +132,7 @@ class MaterialViewModel(private val repository: MaterialRepository) {
             popupWarningText = "Material mit Seriennummer $code nicht gefunden."
             showPopupWarning = true
             playErrorTone()
+            playNichtErkanntTone()
             return null
         }
     }
@@ -139,6 +177,7 @@ class MaterialViewModel(private val repository: MaterialRepository) {
             popupWarningText = "Material mit Seriennummer $serial nicht gefunden."
             showPopupWarning = true
             playErrorTone()
+            playNichtErkanntTone()
         }
     }
 
@@ -156,7 +195,7 @@ class MaterialViewModel(private val repository: MaterialRepository) {
         }
     }
 
-    fun undoMaterialBySerial(serial: String): Boolean {
+  fun undoMaterialBySerial(serial: String): Boolean {
         val material = materials.find { it.seriennummer?.trim()?.startsWith(serial.trim()) == true }
 
         return if (material != null) {
@@ -219,6 +258,28 @@ class MaterialViewModel(private val repository: MaterialRepository) {
 
 
 
-    private fun playSuccessTone() { Thread { playMp3FromResource("/mp3/ok.mp3") }.start() }
+    fun playSuccessTone() { Thread { playMp3FromResource("/mp3/ok.mp3") }.start() }
     fun playErrorTone() { Thread { playMp3FromResource("/mp3/error.mp3") }.start() }
+    fun playEmpfangModusTone() {
+        Thread { playMp3FromResource("/mp3/empfangsmodus.mp3") }.start()
+    }
+
+    fun playAusgabeModusTone() {
+        Thread { playMp3FromResource("/mp3/ausgabemodus.mp3") }.start()
+    }
+
+    fun playNameErkanntTone() {
+        Thread { playMp3FromResource("/mp3/nameerkant.mp3") }.start()
+    }
+
+    fun playNichtErkanntTone() {
+        Thread { playMp3FromResource("/mp3/nicherkant.mp3") }.start()
+    }
+
+    fun playImLagerTone() {
+        Thread { playMp3FromResource("/mp3/imlager.mp3") }.start()
+    }
+    fun playNichtImLagerTone() {
+        Thread { playMp3FromResource("/mp3/nichimlager.mp3") }.start()
+    }
 }
