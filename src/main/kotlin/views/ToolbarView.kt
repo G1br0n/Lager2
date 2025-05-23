@@ -272,10 +272,11 @@ fun ScanDialog(
                                 }
                                 .onPreviewKeyEvent { event ->
                                     if (event.key == Key.Enter && event.type == KeyEventType.KeyUp) {
-                                        if (empfaengerState.text.isBlank()) {
-                                            if (mode == "Ausgabe") showEmpfaengerWarning = true else showAbgeberWarning = true
-                                        } else {
+                                        if (empfaengerState.text.isNotBlank()) {
+                                            viewModel.playNameErkanntTone()   // <<< hier
                                             focusSerial.requestFocus()
+                                        } else {
+                                            if (mode == "Ausgabe") showEmpfaengerWarning = true else showAbgeberWarning = true
                                         }
                                         true
                                     } else false
@@ -305,11 +306,13 @@ fun ScanDialog(
                                         val name = empfaengerState.text
                                         if (snTrimmed.equals("ende", ignoreCase = true)) {
                                             // "Ende" erkannt: Dialog schließen
+
                                             generateUebergabePdf(
                                                 empfaenger = name,
                                                 log = log.toList(),
                                                 modus = mode
                                             )
+                                            viewModel.playScanEndeTone()
                                             onDismiss()
 
                                         } else if (snTrimmed.isNotBlank()) {

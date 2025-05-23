@@ -16,6 +16,8 @@ import views.*
 import java.awt.AWTEvent
 import java.awt.Toolkit
 import java.awt.event.KeyEvent
+import java.util.logging.Level
+import java.util.logging.Logger
 import javax.swing.SwingUtilities
 
 @OptIn(ExperimentalComposeUiApi::class)
@@ -103,21 +105,21 @@ fun App(viewModel: MaterialViewModel) {
     }
 }
 
+fun configurePdfBoxLogging() {
+    // alle PDFBox-Logger auf SEVERE setzen, damit nur Fehler (und keine WARNINGS) erscheinen
+    Logger.getLogger("org.apache.pdfbox").level = Level.SEVERE
+    Logger.getLogger("org.apache.pdfbox.pdmodel.font.FileSystemFontProvider").level = Level.SEVERE
+}
+
 fun main() = application {
+    configurePdfBoxLogging()
     val repository = SQLiteMaterialRepository()
     val viewModel = MaterialViewModel(repository)
 
     var selectedMaterialForMonitor by remember { mutableStateOf<Material?>(null) }
     val selectedMonitor = selectedMaterialForMonitor
 
-    Toolkit.getDefaultToolkit().addAWTEventListener({ event ->
-        if (event is KeyEvent && event.id == KeyEvent.KEY_RELEASED) {
-            // Auf UI-Thread weiterreichen, um State sicher zu updaten
-            SwingUtilities.invokeLater {
-                viewModel.onGlobalKey(event)
-            }
-        }
-    }, AWTEvent.KEY_EVENT_MASK)
+
     // 🪟 Hauptfenster
     Window(onCloseRequest = ::exitApplication, title = "Lagerverwaltung (MVVM & Grautöne)") {
         App(viewModel)

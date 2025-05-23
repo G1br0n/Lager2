@@ -282,4 +282,7 @@ class MaterialViewModel(private val repository: MaterialRepository) {
     fun playNichtImLagerTone() {
         Thread { playMp3FromResource("/mp3/nichimlager.mp3") }.start()
     }
+    fun playScanEndeTone(){
+        Thread { playMp3FromResource("/mp3/scanende.mp3") }.start()
+    }
 }
