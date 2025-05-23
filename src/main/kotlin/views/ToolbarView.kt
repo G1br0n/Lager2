@@ -301,11 +301,16 @@ fun ScanDialog(
                                 .focusRequester(focusSerial)
                                 .onPreviewKeyEvent { event ->
                                     if (event.key == Key.Enter && event.type == KeyEventType.KeyUp) {
-                                        if (seriennummer.isNotBlank()) {
-                                            // name aus empfaengerState
-                                            val name = empfaengerState.text
-                                            val result = viewModel.processScan(seriennummer)
-                                            if (!result.isNullOrBlank()) log.add("$result SN $seriennummer")
+                                        val snTrimmed = seriennummer.trim()
+                                        if (snTrimmed.equals("ende", ignoreCase = true)) {
+                                            // "Ende" erkannt: Dialog schließen
+                                            onDismiss()
+                                        } else if (snTrimmed.isNotBlank()) {
+                                            // ganz normale Verarbeitung
+                                            val result = viewModel.processScan(snTrimmed)
+                                            if (!result.isNullOrBlank()) {
+                                                log.add("$result SN $snTrimmed")
+                                            }
                                             seriennummer = ""
                                             focusSerial.requestFocus()
                                         }
