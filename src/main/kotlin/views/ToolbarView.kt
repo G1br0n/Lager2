@@ -302,9 +302,16 @@ fun ScanDialog(
                                 .onPreviewKeyEvent { event ->
                                     if (event.key == Key.Enter && event.type == KeyEventType.KeyUp) {
                                         val snTrimmed = seriennummer.trim()
+                                        val name = empfaengerState.text
                                         if (snTrimmed.equals("ende", ignoreCase = true)) {
                                             // "Ende" erkannt: Dialog schließen
+                                            generateUebergabePdf(
+                                                empfaenger = name,
+                                                log = log.toList(),
+                                                modus = mode
+                                            )
                                             onDismiss()
+
                                         } else if (snTrimmed.isNotBlank()) {
                                             // ganz normale Verarbeitung
                                             val result = viewModel.processScan(snTrimmed)
