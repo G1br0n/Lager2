@@ -3,6 +3,7 @@ package tools
 import org.apache.pdfbox.pdmodel.*
 import org.apache.pdfbox.pdmodel.font.PDType1Font
 import org.apache.pdfbox.pdmodel.common.PDRectangle
+import java.awt.Color
 import java.io.File
 import java.time.LocalDateTime
 import java.time.format.DateTimeFormatter
@@ -42,19 +43,47 @@ fun generateUebergabePdf(empfaenger: String, log: List<String>, modus: String = 
         cs.endText()
         y -= 40f
 
-        // Empfänger & Datum
+        // Empfänger-Label
         cs.beginText()
         cs.setFont(PDType1Font.HELVETICA, 12f)
         cs.newLineAtOffset(margin, y)
-        cs.showText("Empfänger: $empfaenger")
+        cs.showText("Empfänger: ")
+        cs.endText()
+        // Gelber Hintergrund NUR hinter dem Namen
+        val labelWidth = PDType1Font.HELVETICA.getStringWidth("Empfänger: ") / 1000 * 12f
+        val nameWidth = PDType1Font.HELVETICA.getStringWidth(empfaenger) / 1000 * 12f
+        cs.setNonStrokingColor(Color.YELLOW)
+        cs.addRect(margin + labelWidth, y - 2f, nameWidth, 14f)
+        cs.fill()
+        // Name selbst
+        cs.setNonStrokingColor(Color.BLACK)
+        cs.beginText()
+        cs.setFont(PDType1Font.HELVETICA, 12f)
+        cs.newLineAtOffset(margin + labelWidth, y)
+        cs.showText(empfaenger)
         cs.endText()
         y -= 20f
 
+        // Datum/Uhrzeit-Label
         val now = LocalDateTime.now().format(DateTimeFormatter.ofPattern("dd.MM.yyyy HH:mm"))
         cs.beginText()
         cs.setFont(PDType1Font.HELVETICA, 12f)
         cs.newLineAtOffset(margin, y)
-        cs.showText("Datum/Uhrzeit: $now")
+        cs.showText("Datum/Uhrzeit: ")
+        cs.endText()
+        // Gelber Hintergrund NUR hinter dem Timestamp
+        val dateLabelWidth = PDType1Font.HELVETICA.getStringWidth("Datum/Uhrzeit: ") / 1000 * 12f
+        val timeText = now
+        val timeWidth = PDType1Font.HELVETICA.getStringWidth(timeText) / 1000 * 12f
+        cs.setNonStrokingColor(Color.YELLOW)
+        cs.addRect(margin + dateLabelWidth, y - 2f, timeWidth, 14f)
+        cs.fill()
+        // Timestamp selbst
+        cs.setNonStrokingColor(Color.BLACK)
+        cs.beginText()
+        cs.setFont(PDType1Font.HELVETICA, 12f)
+        cs.newLineAtOffset(margin + dateLabelWidth, y)
+        cs.showText(timeText)
         cs.endText()
         y -= 30f
 
@@ -73,15 +102,21 @@ fun generateUebergabePdf(empfaenger: String, log: List<String>, modus: String = 
             cs.showText("$material: ${serien.size} Stück")
             cs.endText()
             y -= 16f
-            if (y < margin) return@use  // Sicherheit
+            if (y < margin) return@use
         }
+
+        // Gesamtanzahl
+        cs.beginText()
+        cs.setFont(PDType1Font.HELVETICA_BOLD, 12f)
+        cs.newLineAtOffset(margin, y - 10f)
+        cs.showText("Gesamtanzahl: $totalItems")
+        cs.endText()
     }
 
     // — Inhalt-Seiten ab Seite 2 —
     val contentPages = mutableListOf<PDPage>()
     val contentStreams = mutableListOf<PDPageContentStream>()
     val contentPageRefs = mutableListOf<PDPage>()
-    var currentPageNum = 2
     var x = margin
     var y = startY
     lateinit var content: PDPageContentStream
@@ -104,7 +139,6 @@ fun generateUebergabePdf(empfaenger: String, log: List<String>, modus: String = 
                 y = startY
             } else {
                 content.close()
-                currentPageNum++
                 newPage()
             }
         }
@@ -119,11 +153,44 @@ fun generateUebergabePdf(empfaenger: String, log: List<String>, modus: String = 
     // erste Inhaltsseite
     newPage()
 
-    // Kopf auf jeder Inhaltsseite
+    // Header mit getrennten Label und Highlight nur für Werte
+    val headerTime = LocalDateTime.now().format(DateTimeFormatter.ofPattern("dd.MM.yyyy HH:mm"))
+    val prefix = "$titel an "
+    val name = empfaenger
+    val timestamp = headerTime
+
+    // Prefix
     content.beginText()
     content.setFont(PDType1Font.HELVETICA_BOLD, 16f)
     content.newLineAtOffset(margin, y)
-    content.showText(titel)
+    content.showText(prefix)
+    content.endText()
+    // Highlight Name
+    val prefixW = PDType1Font.HELVETICA_BOLD.getStringWidth(prefix) / 1000 * 16f
+    val nameW = PDType1Font.HELVETICA_BOLD.getStringWidth(name) / 1000 * 16f
+    content.setNonStrokingColor(Color.YELLOW)
+    content.addRect(margin + prefixW, y - 2f, nameW, 18f)
+    content.fill()
+    // Name
+    content.setNonStrokingColor(Color.BLACK)
+    content.beginText()
+    content.setFont(PDType1Font.HELVETICA_BOLD, 16f)
+    content.newLineAtOffset(margin + prefixW, y)
+    content.showText(name)
+    content.endText()
+    // Highlight Timestamp
+    val gap = 8f
+    val tx = margin + prefixW + nameW + gap
+    val tW = PDType1Font.HELVETICA_BOLD.getStringWidth(timestamp) / 1000 * 16f
+    content.setNonStrokingColor(Color.YELLOW)
+    content.addRect(tx, y - 2f, tW, 18f)
+    content.fill()
+    // Timestamp
+    content.setNonStrokingColor(Color.BLACK)
+    content.beginText()
+    content.setFont(PDType1Font.HELVETICA_BOLD, 16f)
+    content.newLineAtOffset(tx, y)
+    content.showText(timestamp)
     content.endText()
     y -= 24f
 
@@ -133,11 +200,10 @@ fun generateUebergabePdf(empfaenger: String, log: List<String>, modus: String = 
         seriennummern.sorted().forEachIndexed { idx, sn ->
             writeLine("${idx + 1}. $sn")
         }
-        writeLine("")  // Leerzeile
+        writeLine("")
     }
 
-    // — Unterschriften‐Block auf der letzten Inhaltsseite —
-    // ACHTUNG: contentPageRefs enthält alle Inhaltsseiten, die letzte ist contentPageRefs.last()
+    // Unterschriften‐Block auf der letzten Inhaltsseite
     val lastPage = contentPageRefs.last()
     PDPageContentStream(doc, lastPage, PDPageContentStream.AppendMode.APPEND, true).use { sig ->
         val sigY = margin + 80f
@@ -156,18 +222,16 @@ fun generateUebergabePdf(empfaenger: String, log: List<String>, modus: String = 
             sig.endText()
             ty -= 14f
         }
-        // Unterschrift
         sig.beginText()
         sig.setFont(PDType1Font.HELVETICA, 12f)
         sig.newLineAtOffset(margin, sigY)
         sig.showText("Unterschrift: _________________________")
         sig.endText()
-        // Datum/Uhrzeit
         sig.beginText()
         sig.setFont(PDType1Font.HELVETICA, 12f)
         sig.newLineAtOffset(margin, sigY - 20f)
-        val now = LocalDateTime.now().format(DateTimeFormatter.ofPattern("dd.MM.yyyy HH:mm"))
-        sig.showText("Datum: $now")
+        val now2 = LocalDateTime.now().format(DateTimeFormatter.ofPattern("dd.MM.yyyy HH:mm"))
+        sig.showText("Datum: $now2")
         sig.endText()
     }
 

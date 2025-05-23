@@ -101,25 +101,34 @@ fun ToolbarView(
         Row(verticalAlignment = Alignment.CenterVertically) {
             Button(
                 onClick = {
-                    viewModel.selectedMode = "Empfang"
-                    showDialog = "Empfang"
-                    viewModel.playEmpfangModusTone()
-                },
-                modifier = Modifier.padding(horizontal = 4.dp)
-            ) {
-                Text("Empfang", fontSize = 18.sp, fontWeight = FontWeight.Bold)
-            }
-            Spacer(Modifier.width(8.dp))
-            Button(
-                onClick = {
                     viewModel.selectedMode = "Ausgabe"
                     showDialog = "Ausgabe"
                     viewModel.playAusgabeModusTone()
                 },
+                colors = ButtonDefaults.buttonColors(
+                    backgroundColor = Color(0xFFFFCDD2),  // rötlich
+                    contentColor = Color.Black
+                ),
                 modifier = Modifier.padding(horizontal = 4.dp)
             ) {
                 Text("Ausgabe", fontSize = 18.sp, fontWeight = FontWeight.Bold)
             }
+            Spacer(Modifier.width(8.dp))
+            Button(
+                onClick = {
+                    viewModel.selectedMode = "Empfang"
+                    showDialog = "Empfang"
+                    viewModel.playEmpfangModusTone()
+                },
+                colors = ButtonDefaults.buttonColors(
+                    backgroundColor = Color(0xFFC8E6C9),  // grünlich
+                    contentColor = Color.Black
+                ),
+                modifier = Modifier.padding(horizontal = 4.dp)
+            ) {
+                Text("Empfang", fontSize = 18.sp, fontWeight = FontWeight.Bold)
+            }
+
 
         }
 
