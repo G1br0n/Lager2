@@ -354,7 +354,17 @@ fun MaterialBox(
     onClick: (Material) -> Unit
 ) {
     val cleanedSerial = material.seriennummer?.trimEnd() ?: ""
-    val displaySerial = if (cleanedSerial.length > 6) cleanedSerial.takeLast(6) else cleanedSerial
+
+    // Sonderregel: wenn "BüP" oder "HFE" in der Seriennummer steckt,
+    // dann die ersten drei Zeichen anzeigen, sonst wie gehabt die letzten 6
+    val displaySerial = when {
+        cleanedSerial.contains("BüP") || cleanedSerial.contains("HFE") ->
+            cleanedSerial.take(3)
+        cleanedSerial.length > 6 ->
+            cleanedSerial.takeLast(6)
+        else ->
+            cleanedSerial
+    }
 
     // ✨ Flash-Animation bei Neuerscheinung
     var isFlashing by remember { mutableStateOf(true) }
@@ -365,7 +375,6 @@ fun MaterialBox(
     )
 
     LaunchedEffect(Unit) {
-        // Nach kurzer Zeit normal einfärben
         delay(700)
         isFlashing = false
     }
@@ -383,7 +392,6 @@ fun MaterialBox(
         Text(displaySerial, style = MaterialTheme.typography.body1)
     }
 }
-
 
 
 @Composable
