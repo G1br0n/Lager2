@@ -261,15 +261,15 @@ class MaterialViewModel(private val repository: MaterialRepository) {
     fun playSuccessTone() { Thread { playMp3FromResource("/mp3/ok.mp3") }.start() }
     fun playErrorTone() { Thread { playMp3FromResource("/mp3/error.mp3") }.start() }
     fun playEmpfangModusTone() {
-        Thread { playMp3FromResource("/mp3/empfangsmodus.mp3") }.start()
+        Thread { playMp3FromResource("/mp3/empfangsmodus_2.mp3") }.start()
     }
 
     fun playAusgabeModusTone() {
-        Thread { playMp3FromResource("/mp3/ausgabemodus.mp3") }.start()
+        Thread { playMp3FromResource("/mp3/ausgabemodus_2.mp3") }.start()
     }
 
     fun playNameErkanntTone() {
-        Thread { playMp3FromResource("/mp3/nameerkant.mp3") }.start()
+        Thread { playMp3FromResource("/mp3/nameerkant_2.mp3") }.start()
     }
 
     fun playNichtErkanntTone() {
@@ -280,7 +280,7 @@ class MaterialViewModel(private val repository: MaterialRepository) {
         Thread { playMp3FromResource("/mp3/imlager.mp3") }.start()
     }
     fun playNichtImLagerTone() {
-        Thread { playMp3FromResource("/mp3/nichimlager.mp3") }.start()
+        Thread { playMp3FromResource("/mp3/nichimlager_2.mp3") }.start()
     }
     fun playScanEndeTone(){
         Thread { playMp3FromResource("/mp3/scanende.mp3") }.start()
