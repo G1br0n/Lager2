@@ -11,13 +11,17 @@ import java.util.*
 // ----------------------------
 // Repository und Persistenz
 // ----------------------------
+// Datei: repositorys/MaterialRepository.kt
+
+
+
 interface MaterialRepository {
     fun getAllMaterials(): List<Material>
     fun addMaterial(material: Material)
     fun updateMaterial(material: Material)
     fun deleteMaterial(material: Material)
-
 }
+
 
 /**
  * SQLite-Implementierung des MaterialRepository.

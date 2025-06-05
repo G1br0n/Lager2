@@ -1,3 +1,4 @@
+// Datei: views/MonitorView.kt
 package views
 
 import androidx.compose.animation.*
@@ -8,6 +9,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.*
+import androidx.compose.material3.Surface
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -20,65 +22,78 @@ import kotlinx.coroutines.delay
 import models.Material
 import tools.ToggleButtonBox
 import viewModels.MaterialViewModel
+import java.time.LocalDateTime
+import java.time.format.DateTimeFormatter
+import java.util.Locale
 
+/**
+ * MonitorView zeigt:
+ * - Linke Spalte: pro Bezeichnung eine „Spalte“ (LazyRow), darin:
+ *     • Überschrift (Bezeichnung)
+ *     • Gesamt / Im Lager / Ausgelagert
+ *     • Für jede Position (nur Ausgelagert) eine Box pro Material
+ * - Rechte Spalte: Buttons aller Positionen (Sonder-Positionen unten)
+ * - Beim Klick auf Material-Box: loadLogsForMaterial(mat) und onMaterialSelected(mat)
+ */
 @Composable
 fun MonitorView(
     viewModel: MaterialViewModel,
     onMaterialSelected: (Material) -> Unit
 ) {
+    // 1) Hole (ggf. gefilterte) Liste aller Materialien
+    val materials = viewModel.filteredMaterials
 
-    val config = APPConfig
-
-    val ausgegebeneMaterials = viewModel.materials.filter { !it.inLager }
-
-    val bezeichnungsReihenfolge = config.bezeichnungsReihenfolge
-
-    val groupedByBezeichnung = viewModel.materials
+    // 2) Gruppiere alle Materialien (unabhängig von inLager) nach Bezeichnung
+    val bezeichnungen = materials
         .groupBy { it.bezeichnung ?: "Unbekannt" }
         .toList()
-        .sortedWith(compareBy { (bezeichnung, _) ->
-            val index = bezeichnungsReihenfolge.indexOf(bezeichnung)
-            if (index != -1) index else Int.MAX_VALUE
+        // Sortiere nach externer Reihenfolge (APPConfig.bezeichnungsReihenfolge)
+        .sortedWith(compareBy { (bez, _) ->
+            val idx = (APPConfig.bezeichnungsReihenfolge).indexOf(bez)
+            if (idx >= 0) idx else Int.MAX_VALUE
         })
         .toMap()
 
-    val allBezeichnungen = groupedByBezeichnung.keys.toList()
+    // 3) Filtere alle aktuell ausgelagerten Materialien
+    val ausgegebeneMaterials = materials.filter { !it.inLager }
 
+    // 4) Sammle alle Positionen (nur ausgelagerte), sortiere alphabetisch
     val allPositions = ausgegebeneMaterials.mapNotNull { it.position }.distinct().sorted()
+
+    // 5) Erzeuge Farbzuordnung pro Position
     val positionColors = remember(allPositions) { generatePositionColors(allPositions) }
 
-    val darkGreen = Color(0xFF2E7D32)
-    val red = Color(0xFFD32F2F)
-    val blue = Color(0xFF1976D2)
+    // 6) Unterteile in reguläre und Sonder-Positionen
+    val lowerSpecials = APPConfig.specialPositions.map { it.lowercase() }
+    val sortedPositions = allPositions.sortedWith(compareBy { pos ->
+        val lower = pos.lowercase()
+        val idx = lowerSpecials.indexOf(lower)
+        if (idx >= 0) "zzzz_$idx" else lower
+    })
+    val regularPositions = sortedPositions.filter { it.lowercase() !in lowerSpecials }
+    val specialPositions = sortedPositions.filter { it.lowercase() in lowerSpecials }
 
-    val selectedBezeichnungenState = remember(allBezeichnungen) {
-        mutableStateOf(allBezeichnungen)
-    }
-    val selectedBezeichnungen = selectedBezeichnungenState.value
-
+    // 7) State: gerade angeklickte Position (für den Positions-Dialog)
     var selectedPositionForDialog by remember { mutableStateOf<String?>(null) }
+
+    // 8) State: Filter-Dialog (Bezeichnungsauswahl)
     var showFilterDialog by remember { mutableStateOf(false) }
 
     Box(modifier = Modifier.fillMaxSize()) {
-        Row(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(4.dp)
+        Row(modifier = Modifier
+            .fillMaxSize()
+            .padding(4.dp)
         ) {
-
-            // Mittlere Anzeige-Spalten (LazyRow), nur für ausgewählte Bezeichnungen
+            // 9) **Linke Spalte**: pro Bezeichnung eine LazyRow
             LazyRow(modifier = Modifier.weight(1f)) {
-                val selectedGroups = selectedBezeichnungen.mapNotNull { bezeichnung ->
-                    groupedByBezeichnung[bezeichnung]?.let { bezeichnung to it }
-                }
+                val groups = bezeichnungen.entries.toList()
+                items(groups.size) { index ->
+                    val (bezeichnung, mats) = groups[index]
+                    val gesamtCount = mats.size
+                    val inLagerCount = mats.count { it.inLager }
+                    val notInLagerCount = mats.count { !it.inLager }
 
-                items(selectedGroups.size) { index ->
-                    val (bezeichnung, materials) = selectedGroups[index]
-                    val inLagerCount = materials.count { it.inLager }
-                    val notInLagerCount = materials.count { !it.inLager }
-                    val totalCount = materials.size
-
-                    LazyColumn(
+                    Column(
                         modifier = Modifier
                             .padding(2.dp)
                             .fillMaxHeight()
@@ -86,61 +101,60 @@ fun MonitorView(
                             .border(1.dp, Color.LightGray),
                         horizontalAlignment = Alignment.CenterHorizontally
                     ) {
-                        item {
-                            Text(bezeichnung, style = MaterialTheme.typography.body1)
-                            Spacer(modifier = Modifier.height(2.dp))
-                            Text("$totalCount", color = darkGreen, style = MaterialTheme.typography.h3)
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Text("$inLagerCount", color = blue, style = MaterialTheme.typography.h3)
-                                Text(" / ", style = MaterialTheme.typography.h4)
-                                Text("$notInLagerCount", color = red, style = MaterialTheme.typography.h3)
-                            }
-                            Spacer(modifier = Modifier.height(4.dp))
+                        // 9a) Überschrift der Spalte
+                        Text(bezeichnung, style = MaterialTheme.typography.body1)
+                        Spacer(modifier = Modifier.height(2.dp))
+                        Text("$gesamtCount", color = Color(0xFF2E7D32), style = MaterialTheme.typography.h3)
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text("$inLagerCount", color = Color(0xFF1976D2), style = MaterialTheme.typography.h3)
+                            Text(" / ", style = MaterialTheme.typography.h4)
+                            Text("$notInLagerCount", color = Color(0xFFD32F2F), style = MaterialTheme.typography.h3)
                         }
+                        Spacer(modifier = Modifier.height(4.dp))
 
-                        val groupedByPosition = materials.filter { !it.inLager }
-                            .groupBy { it.position ?: "Unbekannt" }
+                        // 9b) Innerhalb dieser Bezeichnung: nur ausgelagerte Materialien, gruppiert nach Position
+                        val outOfStock = mats.filter { !it.inLager }
+                        val groupedByPos = outOfStock.groupBy { it.position ?: "Unbekannt" }
 
-                        groupedByPosition.forEach { (position, posMaterials) ->
-                            item {
-                                val positionColor = positionColors[position] ?: Color.LightGray
-                                Box(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .padding(vertical = 1.dp)
-                                        .background(
-                                            positionColor.copy(alpha = 0.3f),
-                                            shape = MaterialTheme.shapes.small
-                                        ),
-                                    contentAlignment = Alignment.Center
-                                ) {
-                                    Text(
-                                        position,
-                                        modifier = Modifier.padding(2.dp),
-                                        style = MaterialTheme.typography.caption
-                                    )
-                                }
-                                Spacer(modifier = Modifier.height(1.dp))
+                        groupedByPos.forEach { (pos, posMats) ->
+                            // Positions-Kopfzeile (mit Hintergrundfarbe)
+                            val posColor = positionColors[pos] ?: Color.LightGray
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(vertical = 1.dp)
+                                    .background(
+                                        posColor.copy(alpha = 0.3f),
+                                        shape = MaterialTheme.shapes.small
+                                    ),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Text(pos, modifier = Modifier.padding(2.dp), style = MaterialTheme.typography.caption)
                             }
-                            items(posMaterials, key = { it.id }) { material ->
-                                val color = positionColors[material.position] ?: Color.LightGray
+                            Spacer(modifier = Modifier.height(1.dp))
 
+                            // Alle Materialien an dieser Position
+                            posMats.forEach { mat ->
+                                val bgColor = positionColors[mat.position] ?: Color.LightGray
                                 AnimatedVisibility(
                                     visible = true,
                                     enter = fadeIn() + expandVertically(),
                                     exit = fadeOut() + shrinkVertically()
                                 ) {
-                                    MaterialBox(material, color, onMaterialSelected)
+                                    MaterialBox(mat, bgColor) {
+                                        // 1) Logs für dieses Material nachladen
+                                        viewModel.loadLogsForMaterial(mat)
+                                        // 2) Callback ans übergeordnete Level (z.B. App)
+                                        onMaterialSelected(mat)
+                                    }
                                 }
                             }
-
-
-
-                            item { Spacer(modifier = Modifier.height(2.dp)) }
+                            Spacer(modifier = Modifier.height(2.dp))
                         }
                     }
 
-                    if (index < selectedGroups.size - 1) {
+                    // Trenner zwischen den „Spalten“, außer nach der letzten
+                    if (index < groups.size - 1) {
                         this@LazyRow.item {
                             Spacer(
                                 modifier = Modifier
@@ -153,37 +167,10 @@ fun MonitorView(
                 }
             }
 
-            // Rechte Spalte: Positionen
-            // Sonder-Positionen sortieren
-
-
-            val specialPositions = config.specialPositions.map { it.lowercase() }
-
-            val sortedPositions = allPositions.sortedWith(compareBy { position ->
-                val lower = position.lowercase()
-                val specialIndex = specialPositions.indexOf(lower)
-                if (specialIndex >= 0) {
-                    // Spezialposition: ans Ende, in definierter Reihenfolge
-                    "zzzz_$specialIndex"
-                } else {
-                    lower
-                }
-            })
-
-
-            val longestPositionText = sortedPositions.maxByOrNull { it.length } ?: ""
-            val textLengthInDp = longestPositionText.length * 11
-            val buttonWidth = textLengthInDp.dp + 32.dp
-
-
-
-            val regularPositions = sortedPositions.filterNot { it in specialPositions }
-            val specialPositionButtons = sortedPositions.filter { it in specialPositions }
-
-
-
-
-
+            // 10) **Rechte Spalte**: Buttons für alle Positionen
+            val longestPos = allPositions.maxByOrNull { it.length } ?: ""
+            val textWidth = longestPos.length * 11
+            val buttonWidth = textWidth.dp + 32.dp
 
             Column(
                 modifier = Modifier
@@ -195,46 +182,42 @@ fun MonitorView(
                 Text("Positionen", style = MaterialTheme.typography.h5)
                 Spacer(modifier = Modifier.height(4.dp))
 
-                // Normale Positionen oben
-                regularPositions.forEach { position ->
-                    val color = positionColors[position] ?: Color.LightGray
+                // Reguläre Positionen oben
+                regularPositions.forEach { pos ->
+                    val color = positionColors[pos] ?: Color.LightGray
                     Button(
-                        onClick = { selectedPositionForDialog = position },
+                        onClick = { selectedPositionForDialog = pos },
                         colors = ButtonDefaults.buttonColors(backgroundColor = color),
                         modifier = Modifier
                             .padding(horizontal = 2.dp, vertical = 1.dp)
                             .fillMaxWidth()
                     ) {
-                        Text(position, color = Color.Black)
+                        Text(pos, color = Color.Black)
                     }
                 }
 
-                // Platzfüller, damit die Sonder-Buttons nach unten wandern
                 Spacer(modifier = Modifier.weight(1f))
 
-                // Optional: Trennlinie
                 Divider(color = Color.Gray, thickness = 1.dp)
                 Spacer(modifier = Modifier.height(4.dp))
 
-                // Sonder-Positionen ganz unten
-                specialPositionButtons.forEach { position ->
-                    val color = positionColors[position] ?: Color.LightGray
+                // Sonder-Positionen unten
+                specialPositions.forEach { pos ->
+                    val color = positionColors[pos] ?: Color.LightGray
                     Button(
-                        onClick = { selectedPositionForDialog = position },
+                        onClick = { selectedPositionForDialog = pos },
                         colors = ButtonDefaults.buttonColors(backgroundColor = color),
                         modifier = Modifier
                             .padding(horizontal = 2.dp, vertical = 1.dp)
                             .fillMaxWidth()
                     ) {
-                        Text(position, color = Color.Black)
+                        Text(pos, color = Color.Black)
                     }
                 }
             }
-
-
         }
 
-            // Filter-Button rechts unten
+        // 11) Filter-Button rechts unten
         Column(
             modifier = Modifier
                 .align(Alignment.BottomEnd)
@@ -245,13 +228,13 @@ fun MonitorView(
             }
         }
 
-        // Bezeichnungsauswahl als Dialog
+        // 12) Filter-Dialog zur Auswahl der Bezeichnungen
         if (showFilterDialog) {
             Dialog(onDismissRequest = { showFilterDialog = false }) {
                 Surface(
                     shape = MaterialTheme.shapes.medium,
-                    color = MaterialTheme.colors.surface,
-                    elevation = 8.dp
+                    color = MaterialTheme.colors.background,
+                    tonalElevation = 8.dp
                 ) {
                     Column(
                         modifier = Modifier
@@ -263,10 +246,13 @@ fun MonitorView(
                         Spacer(modifier = Modifier.height(8.dp))
 
                         BezeichnungCheckboxList(
-                            allBezeichnungen = allBezeichnungen,
-                            selectedBezeichnungen = selectedBezeichnungen,
-                            onSelectionChange = {
-                                selectedBezeichnungenState.value = it
+                            allBezeichnungen = bezeichnungen.keys.toList(),
+                            selectedBezeichnungen = bezeichnungen.keys.toList(),
+                            onSelectionChange = { newList ->
+                                viewModel.filterText = ""
+                                viewModel.filterActive = newList.size < bezeichnungen.size
+                                // Wir setzen filterText simpel auf ein OR-getrenntes Muster
+                                viewModel.filterText = newList.joinToString(separator = "|") { it }
                             }
                         )
 
@@ -283,10 +269,7 @@ fun MonitorView(
             }
         }
 
-
-
-
-        // Positions-Dialog
+        // 13) Positions-Dialog: Alle Materialien an der angeklickten Position
         if (selectedPositionForDialog != null) {
             Dialog(onDismissRequest = { selectedPositionForDialog = null }) {
                 Surface(
@@ -295,7 +278,7 @@ fun MonitorView(
                         .padding(16.dp),
                     shape = MaterialTheme.shapes.medium,
                     color = MaterialTheme.colors.background,
-                    elevation = 8.dp
+                    tonalElevation = 8.dp
                 ) {
                     Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
                         Row(
@@ -346,7 +329,12 @@ fun MonitorView(
     }
 }
 
-
+/**
+ * Einzelne Box für ein Material in der Spaltenansicht:
+ * - Visible mit Fade-In/Slide-In
+ * - Flash-Animation (Gelb kurz)
+ * - Klickbar → onClick(material)
+ */
 @Composable
 fun MaterialBox(
     material: Material,
@@ -354,26 +342,20 @@ fun MaterialBox(
     onClick: (Material) -> Unit
 ) {
     val cleanedSerial = material.seriennummer?.trimEnd() ?: ""
-
-    // Sonderregel: wenn "BüP" oder "HFE" in der Seriennummer steckt,
-    // dann die ersten drei Zeichen anzeigen, sonst wie gehabt die letzten 6
+    // Sonderregel: wenn "BüP" oder "HFE" in der Seriennummer, zeige erstes 3 Zeichen, sonst letzte 6
     val displaySerial = when {
         cleanedSerial.contains("BüP") || cleanedSerial.contains("HFE") ->
             cleanedSerial.take(3)
         cleanedSerial.length > 6 ->
             cleanedSerial.takeLast(6)
-        else ->
-            cleanedSerial
+        else -> cleanedSerial
     }
 
-    // ✨ Flash-Animation bei Neuerscheinung
     var isFlashing by remember { mutableStateOf(true) }
-
     val backgroundColor by animateColorAsState(
         targetValue = if (isFlashing) Color.Yellow.copy(alpha = 0.7f) else color,
         animationSpec = tween(durationMillis = 700)
     )
-
     LaunchedEffect(Unit) {
         delay(700)
         isFlashing = false
@@ -393,7 +375,11 @@ fun MaterialBox(
     }
 }
 
-
+/**
+ * Liste aller Bezeichnungen mit Checkboxen zum Filtern.
+ * selectedBezeichnungen enthält initial alle Bezeichnungen; onSelectionChange
+ * gibt die neu ausgewählten Bezeichnungen zurück.
+ */
 @Composable
 fun BezeichnungCheckboxList(
     allBezeichnungen: List<String>,
@@ -408,9 +394,8 @@ fun BezeichnungCheckboxList(
             .verticalScroll(rememberScrollState()),
         horizontalAlignment = Alignment.Start
     ) {
-        allBezeichnungen.forEach { bezeichnung ->
-            val isSelected = selectedBezeichnungen.contains(bezeichnung)
-
+        allBezeichnungen.forEach { bez ->
+            val isSelected = selectedBezeichnungen.contains(bez)
             Row(
                 verticalAlignment = Alignment.CenterVertically,
                 modifier = Modifier
@@ -418,7 +403,7 @@ fun BezeichnungCheckboxList(
                     .padding(horizontal = 1.dp, vertical = 2.dp)
             ) {
                 Text(
-                    text = bezeichnung,
+                    text = bez,
                     modifier = Modifier
                         .weight(1f)
                         .padding(end = 4.dp),
@@ -429,8 +414,8 @@ fun BezeichnungCheckboxList(
                     isChecked = isSelected,
                     onToggle = {
                         onSelectionChange(
-                            if (!isSelected) selectedBezeichnungen + bezeichnung
-                            else selectedBezeichnungen - bezeichnung
+                            if (!isSelected) selectedBezeichnungen + bez
+                            else selectedBezeichnungen - bez
                         )
                     }
                 )
@@ -439,19 +424,20 @@ fun BezeichnungCheckboxList(
     }
 }
 
-
+/**
+ * Generiert für jede Position eine Farbe. Zuerst wird in APPConfig
+ * nach einer `customColors`‐Zuordnung gesucht (key=Positionsname lowercase).
+ * Falls keine Custom‐Farbe existiert, wird aus einer List<Color> zyklisch gewählt.
+ */
 fun generatePositionColors(positions: List<String>): Map<String, Color> {
-   val config = APPConfig
+    val config = APPConfig
+    val customColors = config.customColors  // Map<String, Color>, keys lowercase
+    val colors = config.colors              // List<Color>
 
-    val customColors = config.customColors
-    val colors = config.colors
-
-    val lowerCustomColors = customColors.mapKeys { it.key.lowercase() }
-
-    return positions.mapIndexed { index, pos ->
+    val lowerCustom = customColors.mapKeys { it.key.lowercase() }
+    return positions.mapIndexed { idx, pos ->
         val key = pos.lowercase()
-        val color = lowerCustomColors[key] ?: colors[index % colors.size]
+        val color = lowerCustom[key] ?: colors[idx % colors.size]
         pos to color
     }.toMap()
 }
-

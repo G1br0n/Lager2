@@ -14,47 +14,57 @@ import models.Material
 import models.MaterialLog
 import java.time.LocalDateTime
 
+/**
+ * DetailDialog zeigt die Details eines Materials und dessen Log-Verlauf.
+ *
+ * @param material Das Material-Objekt (ohne Logs).
+ *                 Die Logs werden separat über den Parameter 'logs' übergeben.
+ * @param logs     Die aktuell geladenen Log-Einträge für dieses Material.
+ * @param onDismiss   Callback, wenn der Dialog geschlossen wird.
+ * @param onSave      Callback, wenn Änderungen abgespeichert werden.
+ * @param onDelete    Callback, wenn das Material gelöscht werden soll.
+ * @param readOnly    Wenn true, ist nur Anzeige (kein Edit-Modus).
+ */
 @Composable
 fun DetailDialog(
     material: Material,
+    logs: List<MaterialLog>,
     onDismiss: () -> Unit,
     onSave: (Material) -> Unit,
-    onDelete: (Material) -> Unit, // ✅ hinzufügen
+    onDelete: (Material) -> Unit,
     readOnly: Boolean = false
-)
- {
+) {
     var showEditMode by remember { mutableStateOf(!readOnly) }
     var showPasswordDialog by remember { mutableStateOf(false) }
 
+    // Passwortabfrage, um Edit-Modus zu aktivieren
     if (showPasswordDialog) {
         PasswordPrompt(
             onConfirm = {
                 if (it == "löschen") {
                     showEditMode = true
-                    showPasswordDialog = false
-                } else {
-                    showPasswordDialog = false
                 }
+                showPasswordDialog = false
             },
             onCancel = { showPasswordDialog = false }
         )
     }
 
-     DetailContent(
-         material = material,
-         readOnly = !showEditMode,
-         onDismiss = onDismiss,
-         onEditRequest = { showPasswordDialog = true },
-         onSave = onSave,
-         onDelete = onDelete // ✅ Weiterleitung hinzufügen
-     )
-
- }
-
+    DetailContent(
+        material = material,
+        logs = logs,
+        readOnly = !showEditMode,
+        onDismiss = onDismiss,
+        onEditRequest = { showPasswordDialog = true },
+        onSave = onSave,
+        onDelete = onDelete
+    )
+}
 
 @Composable
-fun DetailContent(
+private fun DetailContent(
     material: Material,
+    logs: List<MaterialLog>,
     readOnly: Boolean,
     onDismiss: () -> Unit,
     onEditRequest: () -> Unit = {},
@@ -70,7 +80,7 @@ fun DetailContent(
     var showDeletePasswordDialog by remember { mutableStateOf(false) }
     var showDeleteConfirmDialog by remember { mutableStateOf(false) }
 
-    // 🔐 Passwortabfrage vor Löschen
+    // Passwortabfrage vor Löschen
     if (showDeletePasswordDialog) {
         PasswordPrompt(
             onConfirm = {
@@ -85,12 +95,12 @@ fun DetailContent(
         )
     }
 
-    // ✅ Bestätigungsdialog nach erfolgreicher Passwortabfrage
+    // Bestätigungsdialog nach erfolgreicher Passwortabfrage
     if (showDeleteConfirmDialog) {
         AlertDialog(
             onDismissRequest = { showDeleteConfirmDialog = false },
             title = { Text("Löschen bestätigen") },
-            text = { Text("Möchtest du dieses Material wirklich unwiderruflich löschen?") },
+            text = { Text("Möchtest du dieses Material wirklich löschen?") },
             confirmButton = {
                 Button(onClick = {
                     onDelete(material)
@@ -112,6 +122,7 @@ fun DetailContent(
             .padding(16.dp)
             .wrapContentSize()
     ) {
+        // Linke Spalte: Material-Felder
         Column(modifier = Modifier.weight(1f)) {
             Text("Material Details", style = MaterialTheme.typography.h6)
             Spacer(modifier = Modifier.height(8.dp))
@@ -171,19 +182,14 @@ fun DetailContent(
                 } else {
                     Button(onClick = {
                         val changes = mutableListOf<String>()
-
                         if ((material.bezeichnung ?: "").trim() != bezeichnung.trim())
                             changes += "Bezeichnung geändert"
-
                         if ((material.seriennummer ?: "").trim() != seriennummer.trim())
                             changes += "Seriennummer geändert"
-
                         if ((material.position ?: "").trim() != position.trim())
                             changes += "Position geändert"
-
                         if (material.inLager != inLager)
                             changes += if (inLager) "ins Lager gelegt" else "aus Lager entfernt"
-
                         if ((material.notiz ?: "").trim() != notiz.trim()) {
                             if (material.notiz.isNullOrBlank() && notiz.isNotBlank()) {
                                 changes += "Notiz hinzugefügt"
@@ -191,7 +197,6 @@ fun DetailContent(
                                 changes += "Notiz geändert"
                             }
                         }
-
                         if (changes.isEmpty()) {
                             onDismiss()
                             return@Button
@@ -202,16 +207,16 @@ fun DetailContent(
                             user = "Editor",
                             event = "Änderungen: ${changes.joinToString(", ")}"
                         )
-
+                        // Füge den neuen Log ans Ende der bisherigen Logs
+                        val updatedLogs = material.verlaufLog + newLog
                         val updated = material.copy(
                             bezeichnung = bezeichnung.trim().ifBlank { null },
                             seriennummer = seriennummer.trim().ifBlank { null },
                             position = position.trim().ifBlank { null },
                             inLager = inLager,
                             notiz = notiz.trim().ifBlank { null },
-                            verlaufLog = material.verlaufLog + newLog
+                            verlaufLog = updatedLogs
                         )
-
                         onSave(updated)
                     }) {
                         Text("Speichern")
@@ -219,7 +224,7 @@ fun DetailContent(
 
                     Spacer(modifier = Modifier.width(8.dp))
 
-                    // 🛡️ Geschützter Lösch-Button
+                    // Geschützter Lösch-Button
                     Button(
                         onClick = { showDeletePasswordDialog = true },
                         colors = ButtonDefaults.buttonColors(backgroundColor = MaterialTheme.colors.error)
@@ -232,11 +237,13 @@ fun DetailContent(
 
         Spacer(modifier = Modifier.width(16.dp))
 
+        // Rechte Spalte: Log-Verlauf
         Column(modifier = Modifier.weight(1f)) {
             Text("Verlauf", style = MaterialTheme.typography.subtitle1)
             Spacer(modifier = Modifier.height(4.dp))
 
-            val reversedLogs = material.verlaufLog.reversed()
+            // Anzeigen der aktuellen Logs (übergeben in 'logs')
+            val reversedLogs = logs.reversed()
 
             LazyColumn(
                 modifier = Modifier.fillMaxWidth()
@@ -256,7 +263,6 @@ fun DetailContent(
     }
 }
 
-
 @Composable
 fun PasswordPrompt(onConfirm: (String) -> Unit, onCancel: () -> Unit) {
     var password by remember { mutableStateOf("") }
@@ -275,14 +281,12 @@ fun PasswordPrompt(onConfirm: (String) -> Unit, onCancel: () -> Unit) {
                         label = { Text("Passwort") },
                         singleLine = true,
                         visualTransformation = PasswordVisualTransformation(),
-                        modifier = Modifier
-                            .weight(1f)
-                            .onPreviewKeyEvent {
-                                if (it.key == Key.Enter && it.type == KeyEventType.KeyUp) {
-                                    onConfirm(password)
-                                    true
-                                } else false
-                            }
+                        modifier = Modifier.onPreviewKeyEvent {
+                            if (it.key == Key.Enter && it.type == KeyEventType.KeyUp) {
+                                onConfirm(password)
+                                true
+                            } else false
+                        }
                     )
                     Spacer(modifier = Modifier.width(8.dp))
                     Button(onClick = { onConfirm(password) }) {
@@ -296,6 +300,6 @@ fun PasswordPrompt(onConfirm: (String) -> Unit, onCancel: () -> Unit) {
                 Text("Abbrechen")
             }
         },
-        confirmButton = {} // Leerer Platzhalter, weil wir den OK-Button oben verwenden
+        confirmButton = {} // leer, da OK-Button im Text‐Bereich
     )
 }

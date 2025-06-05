@@ -10,15 +10,17 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.*
 import models.Material
-import repositorys.SQLiteMaterialRepository
+import repositorys.FirebaseMaterialRepository
+import repositorys.MaterialRepository
 import viewModels.MaterialViewModel
-import views.*
-import java.awt.AWTEvent
-import java.awt.Toolkit
-import java.awt.event.KeyEvent
+import views.DetailDialog
+import views.MonitorView
+import views.MaterialListView
+import views.MissingNameDialog
+import views.NewMaterialDialog
+import views.ToolbarView
 import java.util.logging.Level
 import java.util.logging.Logger
-import javax.swing.SwingUtilities
 
 @OptIn(ExperimentalComposeUiApi::class)
 @Composable
@@ -41,7 +43,8 @@ fun App(viewModel: MaterialViewModel) {
     var selectedMaterial by remember { mutableStateOf<Material?>(null) }
     var showMissingNameDialog by remember { mutableStateOf(false) }
 
-    val selected = selectedMaterial
+    // ausgewähltes Material aus ViewModel (nur lesen)
+    val logs by remember { derivedStateOf { viewModel.selectedLogs } }
 
     MaterialTheme(colors = GrayColorPalette) {
         Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
@@ -51,6 +54,8 @@ fun App(viewModel: MaterialViewModel) {
             )
             Spacer(modifier = Modifier.height(16.dp))
             MaterialListView(viewModel = viewModel) { material ->
+                // Logs laden, dann Dialog anzeigen
+                viewModel.loadLogsForMaterial(material)
                 selectedMaterial = material
                 showDetailDialog = true
             }
@@ -67,11 +72,12 @@ fun App(viewModel: MaterialViewModel) {
             )
         }
 
-        if (showDetailDialog && selected != null) {
+        if (showDetailDialog && selectedMaterial != null) {
             DialogWindow(
                 onCloseRequest = {
                     showDetailDialog = false
                     selectedMaterial = null
+                    viewModel.clearSelection()
                 },
                 title = "Materialdetails",
                 state = rememberDialogState(width = 1200.dp, height = 450.dp),
@@ -79,20 +85,24 @@ fun App(viewModel: MaterialViewModel) {
                 alwaysOnTop = true
             ) {
                 DetailDialog(
-                    material = selected,
+                    material = selectedMaterial!!,
+                    logs = logs,
                     onDismiss = {
                         showDetailDialog = false
                         selectedMaterial = null
+                        viewModel.clearSelection()
                     },
                     onSave = {
                         viewModel.updateMaterial(it)
                         showDetailDialog = false
                         selectedMaterial = null
+                        viewModel.clearSelection()
                     },
                     onDelete = {
                         viewModel.deleteMaterial(it)
                         showDetailDialog = false
                         selectedMaterial = null
+                        viewModel.clearSelection()
                     },
                     readOnly = true
                 )
@@ -106,51 +116,63 @@ fun App(viewModel: MaterialViewModel) {
 }
 
 fun configurePdfBoxLogging() {
-    // alle PDFBox-Logger auf SEVERE setzen, damit nur Fehler (und keine WARNINGS) erscheinen
+    // Alle PDFBox-Logger auf SEVERE setzen, damit nur Fehler erscheinen
     Logger.getLogger("org.apache.pdfbox").level = Level.SEVERE
     Logger.getLogger("org.apache.pdfbox.pdmodel.font.FileSystemFontProvider").level = Level.SEVERE
 }
 
 fun main() = application {
     configurePdfBoxLogging()
-    val repository = SQLiteMaterialRepository()
+    initFirebaseAdmin()
+    val repository: MaterialRepository = FirebaseMaterialRepository()
     val viewModel = MaterialViewModel(repository)
 
+    // Zweites Fenster: MonitorView
     var selectedMaterialForMonitor by remember { mutableStateOf<Material?>(null) }
-    val selectedMonitor = selectedMaterialForMonitor
-
+    val monitorLogs by remember { derivedStateOf { viewModel.selectedLogs } }
 
     // 🪟 Hauptfenster
-    Window(onCloseRequest = ::exitApplication, title = "Lagerverwaltung (MVVM & Grautöne)") {
+    Window(onCloseRequest = ::exitApplication, title = "Lagerverwaltung") {
         App(viewModel)
     }
 
     // 🖥️ Zweitfenster: Monitor
     Window(onCloseRequest = {}, title = "Material Monitor") {
-        MonitorView(viewModel) { selected ->
-            selectedMaterialForMonitor = selected
+        MonitorView(viewModel) { material ->
+            // Logs laden, dann wird selectedMaterialForMonitor gesetzt
+            viewModel.loadLogsForMaterial(material)
+            selectedMaterialForMonitor = material
         }
     }
 
     // 🔍 Detailansicht im Monitor mit Read-Only
-    if (selectedMonitor != null) {
+    if (selectedMaterialForMonitor != null) {
         DialogWindow(
-            onCloseRequest = { selectedMaterialForMonitor = null },
+            onCloseRequest = {
+                selectedMaterialForMonitor = null
+                viewModel.clearSelection()
+            },
             title = "Materialdetails",
             state = rememberDialogState(width = 1200.dp, height = 450.dp),
             resizable = true,
             alwaysOnTop = true
         ) {
             DetailDialog(
-                material = selectedMonitor,
-                onDismiss = { selectedMaterialForMonitor = null },
+                material = selectedMaterialForMonitor!!,
+                logs = monitorLogs,
+                onDismiss = {
+                    selectedMaterialForMonitor = null
+                    viewModel.clearSelection()
+                },
                 onSave = {
                     viewModel.updateMaterial(it)
                     selectedMaterialForMonitor = null
+                    viewModel.clearSelection()
                 },
                 onDelete = {
                     viewModel.deleteMaterial(it)
                     selectedMaterialForMonitor = null
+                    viewModel.clearSelection()
                 },
                 readOnly = true
             )
