@@ -22,6 +22,14 @@ class FirebaseMaterialRepository : MaterialRepository {
     private val firestore: Firestore = FirestoreClient.getFirestore()
     private val dtf: DateTimeFormatter = DateTimeFormatter.ISO_LOCAL_DATE_TIME
 
+
+    private fun humanReadable(bytes: Int): String =
+        when {
+            bytes >= 1024 * 1024 -> "%.2f MB".format(bytes / (1024.0 * 1024))
+            bytes >= 1024        -> "%.2f KB".format(bytes / 1024.0)
+            else                 -> "$bytes B"
+        }
+
     override fun getAllMaterials(): List<Material> {
         // In der Desktop‐Variante verzichten wir hier auf eine synchrone Abfrage,
         // da wir im ViewModel per Listener ohnehin laufend aktualisieren.
@@ -166,6 +174,12 @@ class FirebaseMaterialRepository : MaterialRepository {
                     println("listenToMaterials: snapshot ist null")
                     return@addSnapshotListener
                 }
+
+                val totalBytes = snapshots.documents.sumOf { doc ->
+                    doc.id.toByteArray().size +
+                            (doc.data?.toString()?.toByteArray()?.size ?: 0)
+                }
+                println("ListenToMaterials: geladen ${humanReadable(totalBytes)}")
 
                 val tempList = mutableListOf<Material>()
                 for (doc in snapshots.documents) {

@@ -16,6 +16,7 @@ import viewModels.MaterialViewModel
 import views.DetailDialog
 import views.MonitorView
 import views.MaterialListView
+import views.MaterialOverviewScreen
 import views.MissingNameDialog
 import views.NewMaterialDialog
 import views.ToolbarView
@@ -130,6 +131,8 @@ fun main() = application {
     // Zweites Fenster: MonitorView
     var selectedMaterialForMonitor by remember { mutableStateOf<Material?>(null) }
     val monitorLogs by remember { derivedStateOf { viewModel.selectedLogs } }
+// Drittfenster: Overview
+    var showOverviewWindow by remember { mutableStateOf(true) }   // true = gleich beim Start öffnen
 
     // 🪟 Hauptfenster
     Window(onCloseRequest = ::exitApplication, title = "Lagerverwaltung") {
@@ -137,11 +140,14 @@ fun main() = application {
     }
 
     // 🖥️ Zweitfenster: Monitor
-    Window(onCloseRequest = {}, title = "Material Monitor") {
-        MonitorView(viewModel) { material ->
-            // Logs laden, dann wird selectedMaterialForMonitor gesetzt
-            viewModel.loadLogsForMaterial(material)
-            selectedMaterialForMonitor = material
+
+// 📊 Drittfenster: Material-Übersicht
+    if (showOverviewWindow) {
+        Window(
+            onCloseRequest = { showOverviewWindow = false },
+            title = "Material Übersicht"
+        ) {
+            MaterialOverviewScreen(viewModel)
         }
     }
 

@@ -79,6 +79,24 @@ fun MonitorView(
     // 8) State: Filter-Dialog (Bezeichnungsauswahl)
     var showFilterDialog by remember { mutableStateOf(false) }
 
+
+
+    Column{
+        Row{
+            //Material carden mit informationen über das material, wo man als Überschrift die bezeichnung siht
+            // dadrunter di informationen In Lager(wen es als tru ist) und gesamt anzahl
+            // daneben in der card sol lazy colum sein mit positionen und anzahl der geräte bei position(nur zeigen wen es nicht im lager ist )
+        }
+        Row {
+            //wen eine row vol ist sol sich die nächste öfnen
+        }
+    }
+ //zu dem soll es eine sortir funktion geben für die carde reinfolge , die reinfolge exsestirt bereits und du kans die daraus nehemen
+
+
+
+
+
     Box(modifier = Modifier.fillMaxSize()) {
         Row(modifier = Modifier
             .fillMaxSize()
@@ -424,19 +442,20 @@ fun BezeichnungCheckboxList(
     }
 }
 
+
 /**
  * Generiert für jede Position eine Farbe. Zuerst wird in APPConfig
  * nach einer `customColors`‐Zuordnung gesucht (key=Positionsname lowercase).
  * Falls keine Custom‐Farbe existiert, wird aus einer List<Color> zyklisch gewählt.
  */
+// Ersatz für das bisherige generatePositionColors
 fun generatePositionColors(positions: List<String>): Map<String, Color> {
-    val config = APPConfig
-    val customColors = config.customColors  // Map<String, Color>, keys lowercase
-    val colors = config.colors              // List<Color>
+    val colors       = (APPConfig.colors ?: listOf(Color.LightGray)).ifEmpty { listOf(Color.LightGray) }
+    val customColors = APPConfig.customColors ?: emptyMap()
 
     val lowerCustom = customColors.mapKeys { it.key.lowercase() }
     return positions.mapIndexed { idx, pos ->
-        val key = pos.lowercase()
+        val key   = pos.lowercase()
         val color = lowerCustom[key] ?: colors[idx % colors.size]
         pos to color
     }.toMap()

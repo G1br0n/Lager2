@@ -8,7 +8,7 @@ fun initFirebaseAdmin() {
     if (FirebaseApp.getApps().isEmpty()) {
         val stream: InputStream? = Thread.currentThread()
             .contextClassLoader
-            .getResourceAsStream("vrs-app-79a8e-firebase-adminsdk-fbsvc-f681d34ab2.json")
+            .getResourceAsStream("vrs-app-79a8e-firebase-adminsdk-fbsvc-9d20b0d8e9.json")
         if (stream == null) {
             throw RuntimeException("Service-Account-Key nicht gefunden")
         }
