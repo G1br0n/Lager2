@@ -373,6 +373,20 @@ class MaterialViewModel(private val repository: MaterialRepository) {
     // ----------------------------------------------------------------------------
     // Log‐Ladefunktion für Detail‐Dialog
     // ----------------------------------------------------------------------------
+    fun getPositionLastUsedMap(): Map<String, Long> {
+        val map = mutableMapOf<String, Long>()
+        for (mat in materials) {
+            if (!mat.inLager) {
+                val pos = mat.position ?: continue
+                val lastTimestamp = mat.verlaufLog
+                    .mapNotNull { it.timestamp?.atZone(java.time.ZoneId.systemDefault())?.toInstant()?.toEpochMilli() }
+                    .maxOrNull() ?: continue
+                map[pos] = maxOf(map[pos] ?: 0, lastTimestamp)
+            }
+        }
+        return map
+    }
+
 
     /**
      * Lädt alle Logs für das angegebene Material und füllt selectedLogs.

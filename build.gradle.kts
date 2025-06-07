@@ -43,6 +43,8 @@ dependencies {
     implementation("org.slf4j:slf4j-simple:1.7.36")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-play-services:1.8.1")
 
+    implementation("org.burnoutcrew.composereorderable:reorderable:0.9.6")
+
 }
 
 compose.desktop {
