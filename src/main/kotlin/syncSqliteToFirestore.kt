@@ -80,35 +80,30 @@ private fun uploadMaterialsToFirestore(
 
     for (material in materials) {
         try {
-            // 4.1 Basisdaten-Mapping
+            // Logs in embedded format vorbereiten
+            val embeddedLogs = material.verlaufLog.map { log ->
+                mapOf(
+                    "timestamp" to log.timestamp.format(dtf),
+                    "user" to log.user,
+                    "event" to log.event
+                )
+            }
+
             val materialData = mapOf(
                 "seriennummer" to material.seriennummer,
                 "bezeichnung" to material.bezeichnung,
                 "inLager" to material.inLager,
                 "notiz" to material.notiz,
-                "position" to material.position
+                "position" to material.position,
+                "verlaufLog" to embeddedLogs  // ← logs eingebettet
             )
 
-            // 4.2 Document-Referenz unter "materials/{UUID}"
             val docRef: DocumentReference = firestore
                 .collection("materials")
                 .document(material.id.toString())
 
-            // 4.3 Basisdaten setzen
             docRef.set(materialData).get()
-            println("Material ${material.id} geschrieben.")
-
-            // 4.4 Logs in Unter-Collection "logs" anlegen
-            val logsCollection = docRef.collection("logs")
-            for (log in material.verlaufLog) {
-                val logData = mapOf(
-                    "timestamp" to log.timestamp.format(dtf),
-                    "user" to log.user,
-                    "event" to log.event
-                )
-                logsCollection.add(logData).get()
-            }
-            println("  → ${material.verlaufLog.size} Logs hochgeladen.")
+            println("Material ${material.id} (mit ${embeddedLogs.size} Logs) geschrieben.")
 
         } catch (e: InterruptedException) {
             Thread.currentThread().interrupt()
@@ -118,3 +113,6 @@ private fun uploadMaterialsToFirestore(
         }
     }
 }
+
+
+

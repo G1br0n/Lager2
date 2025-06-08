@@ -10,6 +10,7 @@ import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
 import androidx.compose.material3.contentColorFor
@@ -22,6 +23,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.window.Dialog
 import config.APPConfig
 import kotlinx.coroutines.delay
 import models.Material
@@ -74,6 +76,7 @@ fun MaterialOverviewScreen(
         items(orderedKeys) { key ->
             groups[key]?.let { mats ->
                 MaterialCard(
+                    viewModel = viewModel,
                     title           = key,
                     materials       = mats,
                     usageMap        = usageMap,
@@ -100,7 +103,7 @@ private fun MaterialCardBody(
     horizontalNumbers: Boolean,
     onPositionClick: (String) -> Unit,
     headerColor: Color,
-    /* --- NEU --- */
+
     highlightPositions: Set<String> = emptySet(),
     flashOn: Boolean = false
 ) {
@@ -206,10 +209,12 @@ private fun Lagerzahl(value: Int, color: Color) {
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun MaterialCard(
+    viewModel: MaterialViewModel,
     title: String,
     materials: List<Material>,
     usageMap: Map<String, Long>,
     onPositionClick: (String) -> Unit = {}
+
 ) {
     val total      = materials.size
     val inLager    = materials.count { it.inLager }
@@ -228,6 +233,8 @@ fun MaterialCard(
     var flashingPositions by remember { mutableStateOf<Set<String>>(emptySet()) }
     var flashOn           by remember { mutableStateOf(false) }
     var prevPosCounts     by remember { mutableStateOf<Map<String, Int>>(emptyMap()) }
+    var selectedPosition by remember { mutableStateOf<String?>(null) }
+    var showLogsDialog by remember { mutableStateOf(false) }
 
     LaunchedEffect(materials) {
         val currentPosCounts = materials
@@ -310,14 +317,16 @@ fun MaterialCard(
         )
     ) {
         MaterialCardBody(
-            title             = title,
-            total             = total,
-            inLager           = inLager,
-            outOfLager        = outOfLager,
-            posCounts         = posCounts,
-            horizontalNumbers = false,
-            onPositionClick   = onPositionClick,
-            headerColor       = animatedHeaderColor,
+            title              = title,
+            total              = total,
+            inLager            = inLager,
+            outOfLager         = outOfLager,
+            posCounts          = posCounts,
+            horizontalNumbers  = false,
+            onPositionClick    = {
+                selectedPosition = it // ← Hier setzen wir die Position
+            },
+            headerColor        = animatedHeaderColor,
             highlightPositions = flashingPositions,
             flashOn            = flashOn
         )
@@ -350,6 +359,149 @@ fun MaterialCard(
             }
         )
     }
+
+
+    if (selectedPosition != null) {
+        val pos = selectedPosition!!
+        val materialsForPosition = materials
+            .filter { it.position == pos }
+            .sortedBy { it.bezeichnung ?: "" }
+
+        val buttonColor = APPConfig.customColors[pos.lowercase()]
+            ?: APPConfig.colors.getOrNull(abs(pos.hashCode()) % APPConfig.colors.size)
+            ?: APPConfig.colors.random(Random(abs(pos.hashCode())))
+
+        // Vollbild-Dialog mit transparentem Hintergrund + benutzerdefinierter Inhalt
+        Dialog(onDismissRequest = { selectedPosition = null }) {
+            Surface(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .fillMaxHeight()
+                    .padding(16.dp),
+                shape = RoundedCornerShape(12.dp),
+                tonalElevation = 8.dp
+            ) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(16.dp)
+                ) {
+                    // Header mit farbigem Hintergrund
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .background(buttonColor)
+                            .padding(12.dp)
+                    ) {
+                        Text(
+                            text = "Position: $pos",
+                            color = Color.White,
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 20.sp,
+                            modifier = Modifier.align(Alignment.Center)
+                        )
+                    }
+
+                    Spacer(Modifier.height(12.dp))
+
+                    // Scrollbare Liste der Geräte
+                    LazyColumn(
+                        modifier = Modifier
+                            .weight(1f)
+                            .fillMaxWidth(),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        itemsIndexed(materialsForPosition) { index, mat ->
+                            Button(
+                                onClick = {
+                                    viewModel.loadLogsForMaterial(mat)
+                                    showLogsDialog = true  // << neues State-Flag
+                                },
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = Color.Black,
+                                    contentColor = Color.White
+                                ),
+                                shape = RoundedCornerShape(6.dp),
+                                border = BorderStroke(1.dp, Color.Black),
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(48.dp)
+                            ) {
+                                Text(
+                                    text = "${index + 1}. ${mat.bezeichnung ?: "?"} – ${mat.seriennummer ?: "-"}",
+                                    fontSize = 15.sp,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                            }
+                        }
+                    }
+
+                    Spacer(Modifier.height(12.dp))
+
+                    // Schließen-Button unten
+                    Button(
+                        onClick = { selectedPosition = null },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(48.dp)
+                    ) {
+                        Text("Schließen")
+                    }
+                }
+            }
+        }
+    }
+
+    if (showLogsDialog && viewModel.selectedMaterial != null) {
+        Dialog(onDismissRequest = {
+            showLogsDialog = false
+            viewModel.clearSelection()
+        }) {
+            Surface(
+                shape = RoundedCornerShape(12.dp),
+                tonalElevation = 8.dp,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .fillMaxHeight()
+                    .padding(16.dp)
+            ) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Text(
+                        text = "Verlauf – ${viewModel.selectedMaterial?.bezeichnung ?: "?"}",
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 20.sp
+                    )
+                    Spacer(Modifier.height(12.dp))
+                    LazyColumn(
+                        modifier = Modifier
+                            .weight(1f)
+                            .fillMaxWidth(),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        items(viewModel.selectedLogs.asReversed()) { log ->
+                            Text(
+                                text = "${log.timestamp?.format(java.time.format.DateTimeFormatter.ofPattern("dd.MM.yyyy HH:mm"))} – ${log.event}",
+                                fontSize = 14.sp
+                            )
+                        }
+                    }
+                    Spacer(Modifier.height(12.dp))
+                    Button(
+                        onClick = {
+                            showLogsDialog = false
+                            viewModel.clearSelection()
+                        },
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text("Schließen")
+                    }
+                }
+            }
+        }
+    }
+
+
 }
 
 /* ------------------------------------------------------------------
