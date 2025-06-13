@@ -36,7 +36,13 @@ object APPConfig {
         "F500-SEN",
         "F500-AB",
         "ZRC-10",
-        "ZRC-V"
+        "ZRC-V",
+        "ZIR",
+        "ZWG",
+        "GSMR-810R",
+        "BüP-Band-2",
+        "ZPW-Magnethalter",
+
     )
 
     //Sortirt butons bei position am ende in der rein folge

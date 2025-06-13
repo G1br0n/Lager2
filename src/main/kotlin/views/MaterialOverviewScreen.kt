@@ -34,7 +34,7 @@ import kotlin.random.Random
 /* ------------------------------------------------------------------
    Konfigurierbare Konstanten
 ------------------------------------------------------------------- */
-private val CARD_HEIGHT                   = 154.dp
+private val CARD_HEIGHT                   = 250.dp
 private val POSITION_BUTTON_HEIGHT        = 28.dp
 private val POSITION_BUTTON_CORNER_RADIUS = 4.dp
 private val CARD_CORNER_RADIUS            = 12.dp
@@ -66,7 +66,7 @@ fun MaterialOverviewScreen(
     val usageMap = remember { viewModel.getPositionLastUsedMap() }
 
     LazyVerticalGrid(
-        columns = GridCells.Fixed(5),
+        columns = GridCells.Fixed(6),
         modifier = Modifier
             .fillMaxSize()
             .padding(8.dp),
