@@ -33,6 +33,7 @@ object APPConfig {
         "ZPW-12",
         "ZPW126-10",
         "ZFS-10",
+        "HFE-Rucksack",
         "F500-SEN",
         "F500-AB",
         "ZRC-10",
