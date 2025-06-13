@@ -214,7 +214,6 @@ fun MaterialCard(
     materials: List<Material>,
     usageMap: Map<String, Long>,
     onPositionClick: (String) -> Unit = {}
-
 ) {
     val total      = materials.size
     val inLager    = materials.count { it.inLager }
@@ -233,7 +232,10 @@ fun MaterialCard(
     var flashingPositions by remember { mutableStateOf<Set<String>>(emptySet()) }
     var flashOn           by remember { mutableStateOf(false) }
     var prevPosCounts     by remember { mutableStateOf<Map<String, Int>>(emptyMap()) }
+
     var selectedPosition by remember { mutableStateOf<String?>(null) }
+    var showPositionDialog by remember { mutableStateOf(false) }
+
     var showLogsDialog by remember { mutableStateOf(false) }
 
     LaunchedEffect(materials) {
@@ -246,33 +248,28 @@ fun MaterialCard(
             prevPosCounts[pos] != currentPosCounts[pos]
         }.toSet()
 
-        // Vergleiche Bestand
         val diffInLager = inLager - prevInLager
 
-        // Vergleiche Positionen unabhängig vom Bestand
         val prevPositions = prevMaterials.mapNotNull { it.position }
         val currentPositions = materials.mapNotNull { it.position }
 
         val positionChanged = prevPositions != currentPositions
 
-        // Setze Header-Farbe je nach Änderung
         headerHighlightColor = when {
-            diffInLager > 0  -> Color(0xFFC8E6C9) // sanftes Grün (Green 100)
-            diffInLager < 0  -> Color(0xFFFFCDD2) // sanftes Rot   (Red 100)
-            positionChanged  -> Color(0xFFFFF59D) // sanftes Gelb  (Yellow 100)
+            diffInLager > 0  -> Color(0xFFC8E6C9)
+            diffInLager < 0  -> Color(0xFFFFCDD2)
+            positionChanged  -> Color(0xFFFFF59D)
             else             -> null
         }
 
-        // Optional: Karte hellblau hervorheben
         if (headerHighlightColor != null) {
-            cardHighlightColor = Color(0xFF64B5F6) // Light Blue 300
+            cardHighlightColor = Color(0xFF64B5F6)
         }
 
         prevPosCounts = currentPosCounts
         prevMaterials = materials
         prevInLager   = inLager
 
-        // Flimmern bei Positionsänderung
         if (qtyChangedPositions.isNotEmpty()) {
             flashingPositions = qtyChangedPositions
             repeat(16) {
@@ -287,7 +284,6 @@ fun MaterialCard(
         cardHighlightColor   = null
         headerHighlightColor = null
     }
-
 
     val targetCardColor     = cardHighlightColor ?: baseCardColor
     val animatedCardColor   by animateColorAsState(targetCardColor, tween(1000))
@@ -324,7 +320,8 @@ fun MaterialCard(
             posCounts          = posCounts,
             horizontalNumbers  = false,
             onPositionClick    = {
-                selectedPosition = it // ← Hier setzen wir die Position
+                selectedPosition = it
+                showPositionDialog = true
             },
             headerColor        = animatedHeaderColor,
             highlightPositions = flashingPositions,
@@ -332,6 +329,7 @@ fun MaterialCard(
         )
     }
 
+    // === Dialog 1: Haupt-Dialog ===
     if (showDialog) {
         AlertDialog(
             onDismissRequest = { showDialog = false },
@@ -344,14 +342,17 @@ fun MaterialCard(
             text = {
                 Box(modifier = Modifier.fillMaxWidth()) {
                     MaterialCardBody(
-                        title             = title,
-                        total             = total,
-                        inLager           = inLager,
-                        outOfLager        = outOfLager,
-                        posCounts         = posCounts,
-                        horizontalNumbers = true,
-                        onPositionClick   = onPositionClick,
-                        headerColor       = animatedHeaderColor,
+                        title              = title,
+                        total              = total,
+                        inLager            = inLager,
+                        outOfLager         = outOfLager,
+                        posCounts          = posCounts,
+                        horizontalNumbers  = true,
+                        onPositionClick    = {
+                            selectedPosition = it
+                            showPositionDialog = true
+                        },
+                        headerColor        = animatedHeaderColor,
                         highlightPositions = flashingPositions,
                         flashOn            = flashOn
                     )
@@ -360,8 +361,8 @@ fun MaterialCard(
         )
     }
 
-
-    if (selectedPosition != null) {
+    // === Dialog 2: Materialien pro Position ===
+    if (showPositionDialog && selectedPosition != null) {
         val pos = selectedPosition!!
         val materialsForPosition = materials
             .filter { it.position == pos }
@@ -371,8 +372,10 @@ fun MaterialCard(
             ?: APPConfig.colors.getOrNull(abs(pos.hashCode()) % APPConfig.colors.size)
             ?: APPConfig.colors.random(Random(abs(pos.hashCode())))
 
-        // Vollbild-Dialog mit transparentem Hintergrund + benutzerdefinierter Inhalt
-        Dialog(onDismissRequest = { selectedPosition = null }) {
+        Dialog(onDismissRequest = {
+            selectedPosition = null
+            showPositionDialog = false
+        }) {
             Surface(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -386,7 +389,6 @@ fun MaterialCard(
                         .fillMaxSize()
                         .padding(16.dp)
                 ) {
-                    // Header mit farbigem Hintergrund
                     Box(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -404,7 +406,6 @@ fun MaterialCard(
 
                     Spacer(Modifier.height(12.dp))
 
-                    // Scrollbare Liste der Geräte
                     LazyColumn(
                         modifier = Modifier
                             .weight(1f)
@@ -415,7 +416,7 @@ fun MaterialCard(
                             Button(
                                 onClick = {
                                     viewModel.loadLogsForMaterial(mat)
-                                    showLogsDialog = true  // << neues State-Flag
+                                    showLogsDialog = true
                                 },
                                 colors = ButtonDefaults.buttonColors(
                                     containerColor = Color.Black,
@@ -439,9 +440,11 @@ fun MaterialCard(
 
                     Spacer(Modifier.height(12.dp))
 
-                    // Schließen-Button unten
                     Button(
-                        onClick = { selectedPosition = null },
+                        onClick = {
+                            selectedPosition = null
+                            showPositionDialog = false
+                        },
                         modifier = Modifier
                             .fillMaxWidth()
                             .height(48.dp)
@@ -453,6 +456,7 @@ fun MaterialCard(
         }
     }
 
+    // === Dialog 3: Logs ===
     if (showLogsDialog && viewModel.selectedMaterial != null) {
         Dialog(onDismissRequest = {
             showLogsDialog = false
@@ -500,9 +504,8 @@ fun MaterialCard(
             }
         }
     }
-
-
 }
+
 
 /* ------------------------------------------------------------------
    Position-Button
