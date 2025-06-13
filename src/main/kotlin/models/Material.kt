@@ -1,11 +1,9 @@
 package models
 
+import java.time.LocalDate
 import java.time.LocalDateTime
-import java.util.*
+import java.util.UUID
 
-// ----------------------------
-// Datenmodell
-// ----------------------------
 data class Material(
     val id: UUID = UUID.randomUUID(),
     val seriennummer: String? = null,
@@ -13,8 +11,11 @@ data class Material(
     val inLager: Boolean,
     val notiz: String? = null,
     val position: String? = null,
+    val tuevPlakette: Boolean = false,          // ← JETZT BOOLEAN
+    val tuevAblaufDatum: LocalDate? = null,
     val verlaufLog: List<MaterialLog> = emptyList()
 )
+
 
 data class MaterialLog(
     val timestamp: LocalDateTime,

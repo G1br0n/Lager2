@@ -6,62 +6,67 @@ import com.google.firebase.cloud.FirestoreClient
 import kotlinx.coroutines.*
 import models.Material
 import models.MaterialLog
+import java.time.LocalDate                    // ← NEU
 import java.time.LocalDateTime
 import java.time.format.DateTimeFormatter
 import java.util.*
 import java.util.concurrent.ExecutionException
 
 /**
- * Firestore‐Implementierung von MaterialRepository, erweitert um:
- * 1) Einen SnapshotListener auf die Top‐Level‐Collection "materials".
- * 2) Eine Methode getLogsForMaterial(...) zum Nachladen der Logs.
- * 3) CRUD‐Methoden (add/update/delete) patchen nur veränderte Felder.
+ * Firestore-Implementierung von MaterialRepository.
+ *  • SnapshotListener auf „materials“
+ *  • getLogsForMaterial(...)
+ *  • CRUD (add/update/delete) – patcht nur veränderte Felder
+ *  • Unterstützt die neuen Felder  tuevPlakette (Boolean)  +  tuevAblaufDatum (String→LocalDate)
  */
-class FirebaseMaterialRepository : MaterialRepository {
+open class FirebaseMaterialRepository : MaterialRepository {
 
     private val firestore: Firestore = FirestoreClient.getFirestore()
-    private val dtf: DateTimeFormatter = DateTimeFormatter.ISO_LOCAL_DATE_TIME
+    private val dtf: DateTimeFormatter = DateTimeFormatter.ISO_LOCAL_DATE_TIME   // für Logs
 
-
-    private fun humanReadable(bytes: Int): String =
+    /* Hilfs-Funktion: Byte-Größe schön */
+    private fun humanReadable(bytes: Int) =
         when {
-            bytes >= 1024 * 1024 -> "%.2f MB".format(bytes / (1024.0 * 1024))
-            bytes >= 1024        -> "%.2f KB".format(bytes / 1024.0)
-            else                 -> "$bytes B"
+            bytes >= 1_048_576 -> "%.2f MB".format(bytes / 1_048_576.0)
+            bytes >= 1_024     -> "%.2f KB".format(bytes / 1_024.0)
+            else               -> "$bytes B"
         }
 
-    override fun getAllMaterials(): List<Material> {
-        // In der Desktop‐Variante verzichten wir hier auf eine synchrone Abfrage,
-        // da wir im ViewModel per Listener ohnehin laufend aktualisieren.
-        return emptyList()
-    }
+    /* ------------------------------------------------------------
+     *  Desktop-Variante: ViewModel aktualisiert per Listener
+     * ------------------------------------------------------------ */
+    override fun getAllMaterials(): List<Material> = emptyList()
 
+    /* ------------------------------------------------------------
+     *  1)  ADD
+     * ------------------------------------------------------------ */
     override fun addMaterial(material: Material) {
         try {
-            val materialData = mapOf(
-                "seriennummer" to material.seriennummer,
-                "bezeichnung" to material.bezeichnung,
-                "inLager" to material.inLager,
-                "notiz" to material.notiz,
-                "position" to material.position
+            val data = mapOf(
+                "seriennummer"    to material.seriennummer,
+                "bezeichnung"     to material.bezeichnung,
+                "inLager"         to material.inLager,
+                "notiz"           to material.notiz,
+                "position"        to material.position,
+                /* NEU */
+                "tuevPlakette"    to material.tuevPlakette,
+                "tuevAblaufDatum" to material.tuevAblaufDatum?.toString()   // yyyy-MM-dd oder null
             )
-            val docRef: DocumentReference = firestore
-                .collection("materials")
-                .document(material.id.toString())
-            // neu anlegen
-            docRef.set(materialData).get()
 
-            // Falls beim Anlegen schon Logs vorhanden sind, hänge sie einmalig an
-            if (material.verlaufLog.isNotEmpty()) {
-                val logsCollection = docRef.collection("logs")
-                for (log in material.verlaufLog) {
-                    val logData = mapOf(
+            val docRef = firestore.collection("materials")
+                .document(material.id.toString())
+
+            docRef.set(data).get()
+
+            /* vorhandene Logs anhängen */
+            material.verlaufLog.forEach { log ->
+                docRef.collection("logs").add(
+                    mapOf(
                         "timestamp" to log.timestamp.format(dtf),
-                        "user" to log.user,
-                        "event" to log.event
+                        "user"      to log.user,
+                        "event"     to log.event
                     )
-                    logsCollection.add(logData).get()
-                }
+                ).get()
             }
         } catch (e: InterruptedException) {
             Thread.currentThread().interrupt()
@@ -71,31 +76,36 @@ class FirebaseMaterialRepository : MaterialRepository {
         }
     }
 
+    /* ------------------------------------------------------------
+     *  2)  UPDATE
+     * ------------------------------------------------------------ */
     override fun updateMaterial(material: Material) {
         try {
-            val docRef = firestore.collection("materials").document(material.id.toString())
+            val docRef = firestore.collection("materials")
+                .document(material.id.toString())
 
-            // 1) Nur geänderte Top-Level-Felder patchen
-            val updateData = mapOf<String, Any?>(
-                "seriennummer" to material.seriennummer,
-                "bezeichnung" to material.bezeichnung,
-                "inLager" to material.inLager,
-                "notiz" to material.notiz,
-                "position" to material.position
+            val updates = mapOf<String, Any?>(
+                "seriennummer"    to material.seriennummer,
+                "bezeichnung"     to material.bezeichnung,
+                "inLager"         to material.inLager,
+                "notiz"           to material.notiz,
+                "position"        to material.position,
+                /* NEU */
+                "tuevPlakette"    to material.tuevPlakette,
+                "tuevAblaufDatum" to material.tuevAblaufDatum?.toString()
             )
-            docRef.update(updateData).get()
 
-            // 2) Nur neue Log‐Einträge anhängen (append-only)
-            if (material.verlaufLog.isNotEmpty()) {
-                val logsCollection = docRef.collection("logs")
-                for (log in material.verlaufLog) {
-                    val logData = mapOf(
+            docRef.update(updates).get()
+
+            /* neue Logs anhängen (append-only) */
+            material.verlaufLog.forEach { log ->
+                docRef.collection("logs").add(
+                    mapOf(
                         "timestamp" to log.timestamp.format(dtf),
-                        "user" to log.user,
-                        "event" to log.event
+                        "user"      to log.user,
+                        "event"     to log.event
                     )
-                    logsCollection.add(logData).get()
-                }
+                ).get()
             }
         } catch (e: InterruptedException) {
             Thread.currentThread().interrupt()
@@ -105,22 +115,23 @@ class FirebaseMaterialRepository : MaterialRepository {
         }
     }
 
+    /* ------------------------------------------------------------
+     *  3)  DELETE (unverändert)
+     * ------------------------------------------------------------ */
     override fun deleteMaterial(material: Material) {
         try {
-            val docRef = firestore.collection("materials").document(material.id.toString())
+            val doc = firestore.collection("materials").document(material.id.toString())
 
-            // Zuerst alle Logs in "logs" löschen
-            val logsSnapshot: QuerySnapshot = docRef.collection("logs").get().get()
-            if (logsSnapshot.documents.isNotEmpty()) {
-                val batch: WriteBatch = firestore.batch()
-                for (logDoc in logsSnapshot.documents) {
-                    batch.delete(logDoc.reference)
-                }
+            /* erst alle Logs löschen */
+            val logs = doc.collection("logs").get().get()
+            if (!logs.isEmpty) {
+                val batch = firestore.batch()
+                logs.documents.forEach { batch.delete(it.reference) }
                 batch.commit().get()
             }
 
-            // Dann Material selbst löschen
-            docRef.delete().get()
+            /* dann das Material selbst */
+            doc.delete().get()
             println("Material ${material.id} gelöscht.")
         } catch (e: InterruptedException) {
             Thread.currentThread().interrupt()
@@ -130,79 +141,101 @@ class FirebaseMaterialRepository : MaterialRepository {
         }
     }
 
-    fun getLogsForMaterial(materialId: UUID): List<MaterialLog> {
-        val logs = mutableListOf<MaterialLog>()
+    /* ------------------------------------------------------------
+     *  4)  Logs eines Materials nachladen
+     * ------------------------------------------------------------ */
+    override fun getLogsForMaterial(materialId: UUID): List<MaterialLog> {
+        val out = mutableListOf<MaterialLog>()
         try {
-            val docRef = firestore.collection("materials").document(materialId.toString())
-            // Hier sortieren wir gleich in der Abfrage nach Timestamp (ISO-Strings sortieren lexikografisch korrekt)
-            val logsSnapshot: QuerySnapshot = docRef
+            val snap = firestore.collection("materials")
+                .document(materialId.toString())
                 .collection("logs")
                 .orderBy("timestamp", Query.Direction.ASCENDING)
-                .get()
-                .get()
+                .get().get()
 
-            for (logDoc in logsSnapshot.documents) {
-                val tsString = logDoc.getString("timestamp")
-                val timestamp = tsString?.let { LocalDateTime.parse(it, dtf) } ?: LocalDateTime.now()
-                val user = logDoc.getString("user") ?: "Unbekannt"
-                val event = logDoc.getString("event") ?: ""
-                logs.add(MaterialLog(timestamp, user, event))
+            snap.documents.forEach { d ->
+                val ts = d.getString("timestamp")
+                val time = ts?.let { LocalDateTime.parse(it, dtf) } ?: LocalDateTime.now()
+                out.add(
+                    MaterialLog(
+                        timestamp = time,
+                        user      = d.getString("user") ?: "Unbekannt",
+                        event     = d.getString("event") ?: ""
+                    )
+                )
             }
-        } catch (e: InterruptedException) {
-            Thread.currentThread().interrupt()
-            println("getLogsForMaterial unterbrochen: ${e.localizedMessage}")
-        } catch (e: ExecutionException) {
-            println("Fehler bei getLogsForMaterial: ${e.cause?.localizedMessage ?: e.localizedMessage}")
+        } catch (e: Exception) {
+            println("Fehler bei getLogsForMaterial: ${e.localizedMessage}")
         }
-        return logs
+        return out
     }
 
-    /**
-     * Registriert einen Firestore‐SnapshotListener auf die Collection "materials".
-     * Jedes Mal, wenn sich Top‐Level‐Dokumente ändern, wird `onUpdate(...)` mit
-     * der neuen Liste aller Materials aufgerufen. Gibt ein AutoCloseable zurück,
-     * damit der Aufrufer später `close()` aufrufen kann.
-     */
+    /* ------------------------------------------------------------
+     *  5)  Live-Listener (Top-Level-Daten)
+     * ------------------------------------------------------------ */
     fun listenToMaterials(onUpdate: (List<Material>) -> Unit): AutoCloseable {
         val registration = firestore.collection("materials")
-            .addSnapshotListener { snapshots: QuerySnapshot?, error: FirestoreException? ->
-                if (error != null) {
-                    println("Listener-Fehler in listenToMaterials: ${error.message}")
-                    return@addSnapshotListener
-                }
-                if (snapshots == null) {
-                    println("listenToMaterials: snapshot ist null")
+            .addSnapshotListener { snaps, err ->
+                if (err != null || snaps == null) {
+                    println("Listener-Fehler: ${err?.localizedMessage}")
                     return@addSnapshotListener
                 }
 
-                val totalBytes = snapshots.documents.sumOf { doc ->
-                    doc.id.toByteArray().size +
-                            (doc.data?.toString()?.toByteArray()?.size ?: 0)
-                }
-                println("ListenToMaterials: geladen ${humanReadable(totalBytes)}")
+                println("ListenToMaterials: geladen ${humanReadable(snaps.size())}")
 
-                val tempList = mutableListOf<Material>()
-                for (doc in snapshots.documents) {
-                    try {
-                        val id = UUID.fromString(doc.id)
-                        val seriennr = doc.getString("seriennummer")
-                        val bez = doc.getString("bezeichnung")
-                        val inLagerFlag = doc.getBoolean("inLager") ?: false
-                        val notiz = doc.getString("notiz")
-                        val pos = doc.getString("position")
-                        val logs = emptyList<MaterialLog>() // Logs werden nur bei Bedarf geladen
-                        tempList.add(Material(id, seriennr, bez, inLagerFlag, notiz, pos, logs))
-                    } catch (_: Exception) {
-                        // Ungültige UUID oder Mapping-Fehler → Dokument überspringen
-                    }
+                val list = snaps.documents.mapNotNull { doc ->
+                    kotlin.runCatching {
+                        Material(
+                            id               = UUID.fromString(doc.id),
+                            seriennummer     = doc.getString("seriennummer"),
+                            bezeichnung      = doc.getString("bezeichnung"),
+                            inLager          = doc.getBoolean("inLager") ?: false,
+                            notiz            = doc.getString("notiz"),
+                            position         = doc.getString("position"),
+                            tuevPlakette     = doc.getBoolean("tuevPlakette") ?: false,
+                            tuevAblaufDatum  = doc.getString("tuevAblaufDatum")
+                                ?.takeIf { it.isNotBlank() }
+                                ?.let { LocalDate.parse(it) },
+                            verlaufLog       = emptyList()
+                        )
+                    }.getOrNull()  // ungültige UUID → null
                 }
-                onUpdate(tempList)
+
+                onUpdate(list)
             }
 
-        return object : AutoCloseable {
-            override fun close() {
-                registration.remove()
-            }
-        }
+        return AutoCloseable { registration.remove() }
     }
+}
+
+
+
+
+/**
+ * Gemeinsames Contract-Interface für alle Material-Repositories
+ * (Firebase, SQLite, Mock …).
+ */
+interface MaterialRepository {
+
+    /** Alle Materialien zurückgeben – inkl. Logs, falls vorhanden. */
+    fun getAllMaterials(): List<Material>
+
+    /** Neues Material anlegen. */
+    fun addMaterial(material: Material)
+
+    /** Bestehendes Material (Top-Level + Logs) komplett ersetzen/patchen. */
+    fun updateMaterial(material: Material)
+
+    /** Material + Logs löschen. */
+    fun deleteMaterial(material: Material)
+
+    /** Optional: nur die TÜV-Daten via Serien-Nr. ändern. */
+    fun updateTuevBySerial(
+        serial: String,
+        hatPlakette: Boolean,
+        ablaufDatum: java.time.LocalDate? = null
+    ): Boolean = false          // Default-Implementierung (nicht jede DB braucht das)
+
+    /** Optional: nur Logs eines Materials nachladen. */
+    fun getLogsForMaterial(id: UUID): List<models.MaterialLog> = emptyList()
 }

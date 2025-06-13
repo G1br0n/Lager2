@@ -1,221 +1,211 @@
+// Datei: repositorys/SQLiteMaterialRepository.kt
 package repositorys
-
 
 import models.Material
 import models.MaterialLog
 import java.sql.Connection
 import java.sql.DriverManager
+import java.time.LocalDate
 import java.time.LocalDateTime
-import java.util.*
-
-// ----------------------------
-// Repository und Persistenz
-// ----------------------------
-// Datei: repositorys/MaterialRepository.kt
-
-
-
-interface MaterialRepository {
-    fun getAllMaterials(): List<Material>
-    fun addMaterial(material: Material)
-    fun updateMaterial(material: Material)
-    fun deleteMaterial(material: Material)
-}
-
+import java.util.UUID
 
 /**
- * SQLite-Implementierung des MaterialRepository.
- * Es werden zwei Tabellen verwendet:
- * - materials: speichert die Basisinformationen.
- * - material_log: speichert die Verlaufslogs, verknüpft über material_id.
+ * SQLite-Implementierung für Desktop/CLI-Variante.
+ * Tabellen:
+ *   • materials      – Basisinformationen
+ *   • material_log   – Verlaufseinträge
  */
-class SQLiteMaterialRepository : MaterialRepository {
-    private val connection: Connection
+class SQLiteMaterialRepository : FirebaseMaterialRepository() {
+
+    private val connection: Connection = DriverManager.getConnection("jdbc:sqlite:materials.db")
 
     init {
-        // Verbindung zur SQLite-Datenbank (Datei "materials.db")
-        connection = DriverManager.getConnection("jdbc:sqlite:materials.db")
-
-        // Erstelle Tabellen, falls sie noch nicht existieren:
-        val createMaterialsTable = """
+        /* -------------------------------------------------------- *
+         * 1) Tabellen anlegen, falls sie fehlen
+         * -------------------------------------------------------- */
+        val createMaterials = """
             CREATE TABLE IF NOT EXISTS materials (
-                id TEXT PRIMARY KEY,
-                seriennummer TEXT,
-                bezeichnung TEXT,
-                inLager INTEGER,
-                notiz TEXT,
-                position TEXT
+                id              TEXT PRIMARY KEY,
+                seriennummer    TEXT,
+                bezeichnung     TEXT,
+                inLager         INTEGER,
+                notiz           TEXT,
+                position        TEXT,
+                tuevPlakette    INTEGER   DEFAULT 0,
+                tuevAblaufDatum TEXT       DEFAULT ''
             );
         """.trimIndent()
 
-        val createMaterialLogTable = """
+        val createLogs = """
             CREATE TABLE IF NOT EXISTS material_log (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                material_id TEXT,
-                timestamp TEXT,
-                user TEXT,
-                event TEXT
+                id           INTEGER PRIMARY KEY AUTOINCREMENT,
+                material_id  TEXT,
+                timestamp    TEXT,
+                user         TEXT,
+                event        TEXT
             );
         """.trimIndent()
 
-        connection.createStatement().use { stmt ->
-            stmt.execute(createMaterialsTable)
-            stmt.execute(createMaterialLogTable)
+        connection.createStatement().use { st ->
+            st.execute(createMaterials)
+            st.execute(createLogs)
         }
 
-        // Führe Migration durch, falls Spalte "position" noch nicht existiert
-        val meta = connection.metaData.getColumns(null, null, "materials", "position")
-        if (!meta.next()) {
-            connection.createStatement().use { stmt ->
-                stmt.execute("ALTER TABLE materials ADD COLUMN position TEXT")
-            }
+        /* -------------------------------------------------------- *
+         * 2) Schema-Migration – fehlende Spalten nachrüsten
+         * -------------------------------------------------------- */
+        fun columnExists(col: String): Boolean = connection.metaData
+            .getColumns(null, null, "materials", col).next()
+
+        if (!columnExists("tuevPlakette")) {
+            connection.createStatement()
+                .execute("ALTER TABLE materials ADD COLUMN tuevPlakette INTEGER DEFAULT 0")
         }
-
-        // Nur unter Windows Migration durchführen
-        val isWindows = System.getProperty("os.name").startsWith("Windows", ignoreCase = true)
-
-        if (isWindows) {
-            println("Starte Seriennummer-Migration (Windows erkannt)...")
-
-            val selectQuery = "SELECT id, seriennummer FROM materials"
-            val updateQuery = "UPDATE materials SET seriennummer = ? WHERE id = ?"
-
-            connection.prepareStatement(selectQuery).use { selectStmt ->
-                val rs = selectStmt.executeQuery()
-                val toUpdate = mutableListOf<Pair<String, String>>() // (id, neue Seriennummer)
-
-                while (rs.next()) {
-                    val id = rs.getString("id")
-                    val seriennummer = rs.getString("seriennummer") ?: continue
-
-                    if (seriennummer.isNotEmpty() && !seriennummer[0].isDigit()) {
-                        val newSerial = "~" + seriennummer.drop(1)
-                        toUpdate.add(id to newSerial)
-                    }
-                }
-
-                if (toUpdate.isNotEmpty()) {
-                    connection.prepareStatement(updateQuery).use { updateStmt ->
-                        for ((id, newSerial) in toUpdate) {
-                            updateStmt.setString(1, newSerial)
-                            updateStmt.setString(2, id)
-                            updateStmt.addBatch()
-                        }
-                        updateStmt.executeBatch()
-                        println("Seriennummern aktualisiert: ${toUpdate.size} Einträge.")
-                    }
-                } else {
-                    println("Keine Seriennummern zur Migration gefunden.")
-                }
-            }
+        if (!columnExists("tuevAblaufDatum")) {
+            connection.createStatement()
+                .execute("ALTER TABLE materials ADD COLUMN tuevAblaufDatum TEXT DEFAULT ''")
         }
-
     }
 
+    /* ------------------------------------------------------------ *
+     *  READ – alle Materialien inkl. Logs
+     * ------------------------------------------------------------ */
     override fun getAllMaterials(): List<Material> {
-        val materials = mutableListOf<Material>()
-        val query = "SELECT * FROM materials"
-        connection.prepareStatement(query).use { stmt ->
-            val rs = stmt.executeQuery()
+        val list = mutableListOf<Material>()
+        val sql = "SELECT * FROM materials"
+        connection.prepareStatement(sql).use { st ->
+            val rs = st.executeQuery()
             while (rs.next()) {
-                val id = UUID.fromString(rs.getString("id"))
-                val seriennummer = rs.getString("seriennummer")
-                val bezeichnung = rs.getString("bezeichnung")
-                val inLager = rs.getInt("inLager") != 0
-                val notiz = rs.getString("notiz")
-                val position = try { rs.getString("position") } catch (e: Exception) { null }
+                val id       = UUID.fromString(rs.getString("id"))
+                val serien   = rs.getString("seriennummer")
+                val bez      = rs.getString("bezeichnung")
+                val inLager  = rs.getInt("inLager") == 1
+                val notiz    = rs.getString("notiz")
+                val pos      = rs.getString("position")
+                val plakette = rs.getInt("tuevPlakette") == 1
+                val ablauf   = rs.getString("tuevAblaufDatum")
+                    .takeIf { !it.isNullOrBlank() }?.let { LocalDate.parse(it) }
 
-                // Lese zugehörige Logs
+                /* Logs */
                 val logs = mutableListOf<MaterialLog>()
-                val logQuery = "SELECT * FROM material_log WHERE material_id = ? ORDER BY timestamp ASC"
-                connection.prepareStatement(logQuery).use { logStmt ->
-                    logStmt.setString(1, id.toString())
-                    val logRs = logStmt.executeQuery()
-                    while (logRs.next()) {
-                        val timestamp = LocalDateTime.parse(logRs.getString("timestamp"))
-                        val user = logRs.getString("user")
-                        val event = logRs.getString("event")
-                        logs.add(MaterialLog(timestamp, user, event))
+                val logSql = "SELECT * FROM material_log WHERE material_id = ? ORDER BY timestamp ASC"
+                connection.prepareStatement(logSql).use { logSt ->
+                    logSt.setString(1, id.toString())
+                    val lrs = logSt.executeQuery()
+                    while (lrs.next()) {
+                        logs += MaterialLog(
+                            timestamp = LocalDateTime.parse(lrs.getString("timestamp")),
+                            user      = lrs.getString("user"),
+                            event     = lrs.getString("event")
+                        )
                     }
                 }
 
-                materials.add(Material(id, seriennummer, bezeichnung, inLager, notiz, position, logs))
+                list += Material(
+                    id               = id,
+                    seriennummer     = serien,
+                    bezeichnung      = bez,
+                    inLager          = inLager,
+                    notiz            = notiz,
+                    position         = pos,
+                    tuevPlakette     = plakette,
+                    tuevAblaufDatum  = ablauf,
+                    verlaufLog       = logs
+                )
             }
         }
-        return materials
+        return list
     }
 
+    /* ------------------------------------------------------------ *
+     *  CREATE
+     * ------------------------------------------------------------ */
     override fun addMaterial(material: Material) {
-        val insertMaterial = "INSERT INTO materials (id, seriennummer, bezeichnung, inLager, notiz, position) VALUES (?, ?, ?, ?, ?, ?)"
-        connection.prepareStatement(insertMaterial).use { stmt ->
-            stmt.setString(1, material.id.toString())
-            stmt.setString(2, material.seriennummer)
-            stmt.setString(3, material.bezeichnung)
-            stmt.setInt(4, if (material.inLager) 1 else 0)
-            stmt.setString(5, material.notiz)
-            stmt.setString(6, material.position)
-            stmt.executeUpdate()
+        val sql = """
+            INSERT INTO materials
+            (id, seriennummer, bezeichnung, inLager, notiz, position, tuevPlakette, tuevAblaufDatum)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        """.trimIndent()
+        connection.prepareStatement(sql).use { st ->
+            st.setString(1, material.id.toString())
+            st.setString(2, material.seriennummer)
+            st.setString(3, material.bezeichnung)
+            st.setInt   (4, if (material.inLager) 1 else 0)
+            st.setString(5, material.notiz)
+            st.setString(6, material.position)
+            st.setInt   (7, if (material.tuevPlakette) 1 else 0)
+            st.setString(8, material.tuevAblaufDatum?.toString() ?: "")
+            st.executeUpdate()
         }
-        // Füge die Log-Einträge hinzu
-        val insertLog = "INSERT INTO material_log (material_id, timestamp, user, event) VALUES (?, ?, ?, ?)"
-        connection.prepareStatement(insertLog).use { stmt ->
-            for (log in material.verlaufLog) {
-                stmt.setString(1, material.id.toString())
-                stmt.setString(2, log.timestamp.toString())
-                stmt.setString(3, log.user)
-                stmt.setString(4, log.event)
-                stmt.addBatch()
+
+        /* Logs */
+        val logSql = "INSERT INTO material_log (material_id, timestamp, user, event) VALUES (?, ?, ?, ?)"
+        connection.prepareStatement(logSql).use { st ->
+            material.verlaufLog.forEach { log ->
+                st.setString(1, material.id.toString())
+                st.setString(2, log.timestamp.toString())
+                st.setString(3, log.user)
+                st.setString(4, log.event)
+                st.addBatch()
             }
-            stmt.executeBatch()
+            st.executeBatch()
         }
     }
 
+    /* ------------------------------------------------------------ *
+     *  UPDATE
+     * ------------------------------------------------------------ */
     override fun updateMaterial(material: Material) {
-        val updateMaterial = "UPDATE materials SET seriennummer = ?, bezeichnung = ?, inLager = ?, notiz = ?, position = ? WHERE id = ?"
-        connection.prepareStatement(updateMaterial).use { stmt ->
-            stmt.setString(1, material.seriennummer)
-            stmt.setString(2, material.bezeichnung)
-            stmt.setInt(3, if (material.inLager) 1 else 0)
-            stmt.setString(4, material.notiz)
-            stmt.setString(5, material.position)
-            stmt.setString(6, material.id.toString())
-            stmt.executeUpdate()
+        val sql = """
+            UPDATE materials SET
+                seriennummer    = ?,
+                bezeichnung     = ?,
+                inLager         = ?,
+                notiz           = ?,
+                position        = ?,
+                tuevPlakette    = ?,
+                tuevAblaufDatum = ?
+            WHERE id = ?
+        """.trimIndent()
+        connection.prepareStatement(sql).use { st ->
+            st.setString(1, material.seriennummer)
+            st.setString(2, material.bezeichnung)
+            st.setInt   (3, if (material.inLager) 1 else 0)
+            st.setString(4, material.notiz)
+            st.setString(5, material.position)
+            st.setInt   (6, if (material.tuevPlakette) 1 else 0)
+            st.setString(7, material.tuevAblaufDatum?.toString() ?: "")
+            st.setString(8, material.id.toString())
+            st.executeUpdate()
         }
-        // Alte Logs löschen und alle neuen Logs einfügen
-        val deleteLogs = "DELETE FROM material_log WHERE material_id = ?"
-        connection.prepareStatement(deleteLogs).use { stmt ->
-            stmt.setString(1, material.id.toString())
-            stmt.executeUpdate()
+
+        /* Logs: komplett ersetzen (einfach) */
+        connection.prepareStatement("DELETE FROM material_log WHERE material_id = ?").use {
+            it.setString(1, material.id.toString()); it.executeUpdate()
         }
-        val insertLog = "INSERT INTO material_log (material_id, timestamp, user, event) VALUES (?, ?, ?, ?)"
-        connection.prepareStatement(insertLog).use { stmt ->
-            for (log in material.verlaufLog) {
-                stmt.setString(1, material.id.toString())
-                stmt.setString(2, log.timestamp.toString())
-                stmt.setString(3, log.user)
-                stmt.setString(4, log.event)
-                stmt.addBatch()
+        val logSql = "INSERT INTO material_log (material_id, timestamp, user, event) VALUES (?, ?, ?, ?)"
+        connection.prepareStatement(logSql).use { st ->
+            material.verlaufLog.forEach { log ->
+                st.setString(1, material.id.toString())
+                st.setString(2, log.timestamp.toString())
+                st.setString(3, log.user)
+                st.setString(4, log.event)
+                st.addBatch()
             }
-            stmt.executeBatch()
+            st.executeBatch()
         }
     }
 
+    /* ------------------------------------------------------------ *
+     *  DELETE
+     * ------------------------------------------------------------ */
     override fun deleteMaterial(material: Material) {
-        // Zuerst die Logs löschen
-        val deleteLogs = "DELETE FROM material_log WHERE material_id = ?"
-        connection.prepareStatement(deleteLogs).use { stmt ->
-            stmt.setString(1, material.id.toString())
-            stmt.executeUpdate()
+        connection.prepareStatement("DELETE FROM material_log WHERE material_id = ?").use {
+            it.setString(1, material.id.toString()); it.executeUpdate()
         }
-
-        // Dann das Material selbst löschen
-        val deleteMaterial = "DELETE FROM materials WHERE id = ?"
-        connection.prepareStatement(deleteMaterial).use { stmt ->
-            stmt.setString(1, material.id.toString())
-            stmt.executeUpdate()
+        connection.prepareStatement("DELETE FROM materials WHERE id = ?").use {
+            it.setString(1, material.id.toString()); it.executeUpdate()
         }
-
         println("✅ Material gelöscht: ${material.bezeichnung} (${material.seriennummer})")
     }
-
 }
