@@ -34,7 +34,7 @@ import kotlin.random.Random
 /* ------------------------------------------------------------------
    Konfigurierbare Konstanten
 ------------------------------------------------------------------- */
-private val CARD_HEIGHT                   = 245.dp
+private val CARD_HEIGHT                   = 240.dp
 private val POSITION_BUTTON_HEIGHT        = 28.dp
 private val POSITION_BUTTON_CORNER_RADIUS = 4.dp
 private val CARD_CORNER_RADIUS            = 12.dp
