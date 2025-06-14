@@ -7,6 +7,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.GridItemSpan
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.items
@@ -51,6 +52,7 @@ fun MaterialOverviewScreen(
 ) {
     val materials by remember { derivedStateOf { viewModel.materials.toList() } }
 
+    /* 1) Gruppierung nach Bezeichnung ------------------------------------ */
     val groups by remember(materials) {
         mutableStateOf(materials.groupBy { it.bezeichnung ?: "Unbekannt" })
     }
@@ -63,35 +65,340 @@ fun MaterialOverviewScreen(
         }
     }
 
+    /* 2) Positions-Aggregat --------------------------------------------- */
+    val positionMap by remember(materials) {
+        derivedStateOf {
+            materials.filterNot { it.inLager }
+                .groupBy { it.position ?: "Unbekannt" }
+        }
+    }
     val usageMap = remember { viewModel.getPositionLastUsedMap() }
 
-    LazyVerticalGrid(
-        columns = GridCells.Fixed(6),
+    /* 3) Layout: Grid + feste Zusatz-Spalte ----------------------------- */
+    Row(
         modifier = Modifier
             .fillMaxSize()
             .padding(8.dp),
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
-        verticalArrangement   = Arrangement.spacedBy(8.dp)
+        horizontalArrangement = Arrangement.spacedBy(8.dp)
     ) {
-        items(orderedKeys) { key ->
-            groups[key]?.let { mats ->
-                MaterialCard(
-                    viewModel = viewModel,
-                    title           = key,
-                    materials       = mats,
-                    usageMap        = usageMap,
-                    onPositionClick = onPositionClick
-                )
+
+        /* --- Linke Seite: 6-Spalten-Grid -------------------------------- */
+        LazyVerticalGrid(
+            columns = GridCells.Fixed(6),
+            modifier = Modifier
+                .weight(1f)                 // nimmt den ganzen übrigen Platz
+                .fillMaxHeight(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalArrangement   = Arrangement.spacedBy(8.dp)
+        ) {
+            // Material-Cards
+            items(orderedKeys) { key ->
+                groups[key]?.let { mats ->
+                    MaterialCard(
+                        viewModel       = viewModel,
+                        title           = key,
+                        materials       = mats,
+                        usageMap        = usageMap,
+                        onPositionClick = onPositionClick
+                    )
+                }
             }
         }
+
+        /* --- Rechte Seite: feste Spalte für die Positions-Card ----------- */
+        Column(modifier = Modifier.width(200.dp)) {
+            PositionOverviewCard(
+                viewModel   = viewModel,
+                positionMap = positionMap,
+                usageMap    = usageMap,
+            )
+        }
+
     }
 }
 
 
 /* ------------------------------------------------------------------
+   Positions‑Übersichts‑Karte
+------------------------------------------------------------------- */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun PositionOverviewCard(
+    viewModel: MaterialViewModel,
+    positionMap: Map<String, List<Material>>, // Position → Materialien
+    usageMap: Map<String, Long>
+) {
+    val totalPositions = positionMap.size
+
+    /* --------------------------------------------------------------
+       Sortieren: zuerst nach "zuletzt benutzt", dann alphabetisch.
+    -------------------------------------------------------------- */
+    val sortedPositions by remember(positionMap, usageMap) {
+        derivedStateOf {
+            positionMap.keys.sortedWith(
+                compareByDescending<String> { usageMap[it] ?: 0L }
+                    .thenBy { it }
+            )
+        }
+    }
+
+    /* --------------------------------------------------------------
+       State für Dialog‑Kette
+    -------------------------------------------------------------- */
+    var selectedPosition by remember { mutableStateOf<String?>(null) }
+    var selectedBezeichnung by remember { mutableStateOf<String?>(null) }
+
+    /* --------------------------------------------------------------
+       Karte selbst
+    -------------------------------------------------------------- */
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .fillMaxHeight(),
+        shape  = RoundedCornerShape(CARD_CORNER_RADIUS),
+        border = BorderStroke(CARD_BORDER_WIDTH, Color.Black)
+    ) {
+        Column(modifier = Modifier.fillMaxSize()) {
+            // Header
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(Color.Black)
+                    .padding(8.dp)
+            ) {
+                Text(
+                    text       = "Positionen ($totalPositions)",
+                    color      = Color.White,
+                    fontSize   = 20.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    modifier   = Modifier.align(Alignment.CenterStart)
+                )
+            }
+
+            // Positionsliste
+            LazyColumn(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(10.dp),
+                verticalArrangement = Arrangement.spacedBy(4.dp)
+            ) {
+                items(sortedPositions) { pos ->
+                    val qty = positionMap[pos]?.size ?: 0
+                    PositionButton(
+                        pos      = pos,
+                        qty      = qty,
+                        onClick  = { selectedPosition = pos },
+                    )
+                }
+            }
+        }
+    }
+
+    /* --------------------------------------------------------------
+       Dialog 1 – Bezeichnungen an gewählter Position
+    -------------------------------------------------------------- */
+    if (selectedPosition != null) {
+        val pos = selectedPosition!!
+        val matForPos = positionMap[pos] ?: emptyList()
+        val bezeichCounts = remember(matForPos) {
+            matForPos.groupingBy { it.bezeichnung ?: "?" }.eachCount()
+                .toList()
+                .sortedByDescending { it.second }
+        }
+
+        Dialog(onDismissRequest = { selectedPosition = null }) {
+            Surface(
+                shape = RoundedCornerShape(12.dp),
+                tonalElevation = 8.dp,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .fillMaxHeight(0.8f)
+                    .padding(16.dp)
+            ) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    // --- Titelzeile ---
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .background(
+                                APPConfig.customColors[pos.lowercase()] ?: APPConfig.colors.getOrNull(
+                                    abs(pos.hashCode()) % APPConfig.colors.size
+                                ) ?: Color.Gray
+                            )
+                            .padding(12.dp)
+                    ) {
+                        Text(
+                            text       = "Position: $pos",
+                            color      = Color.White,
+                            fontWeight = FontWeight.Bold,
+                            fontSize   = 20.sp,
+                            modifier   = Modifier.align(Alignment.Center)
+                        )
+                    }
+
+                    Spacer(Modifier.height(12.dp))
+
+                    // --- Liste der Bezeichnungen ---
+                    LazyColumn(
+                        modifier = Modifier.weight(1f),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        items(bezeichCounts) { (bez, qty) ->
+                            Button(
+                                onClick = { selectedBezeichnung = bez },
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = MaterialTheme.colorScheme.primary,
+                                    contentColor   = contentColorFor(MaterialTheme.colorScheme.primary)
+                                ),
+                                shape = RoundedCornerShape(6.dp),
+                                border = BorderStroke(1.dp, Color.Black),
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(48.dp)
+                            ) {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Text(
+                                        text       = bez,
+                                        fontSize   = 15.sp,
+                                        maxLines   = 1,
+                                        overflow   = TextOverflow.Ellipsis,
+                                        modifier   = Modifier.weight(1f)
+                                    )
+                                    Text(text = "– $qty", fontSize = 15.sp)
+                                }
+                            }
+                        }
+                    }
+
+                    Spacer(Modifier.height(12.dp))
+
+                    Button(
+                        onClick = { selectedPosition = null },
+                        modifier = Modifier.fillMaxWidth()
+                    ) { Text("Schließen") }
+                }
+            }
+        }
+    }
+
+    /* --------------------------------------------------------------
+       Dialog 2 – Geräte (Materialien) der gewählten Bezeichnung
+    -------------------------------------------------------------- */
+    if (selectedPosition != null && selectedBezeichnung != null) {
+        val pos = selectedPosition!!
+        val bez = selectedBezeichnung!!
+        val mats = positionMap[pos].orEmpty()
+            .filter { (it.bezeichnung ?: "?") == bez }
+            .sortedBy { it.seriennummer ?: "" }
+
+        Dialog(onDismissRequest = { selectedBezeichnung = null }) {
+            Surface(
+                shape = RoundedCornerShape(12.dp),
+                tonalElevation = 8.dp,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .fillMaxHeight(0.8f)
+                    .padding(16.dp)
+            ) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Text(
+                        text = "$bez – Position $pos",
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 20.sp
+                    )
+                    Spacer(Modifier.height(12.dp))
+                    LazyColumn(
+                        modifier = Modifier.weight(1f),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        itemsIndexed(mats) { index, mat ->
+                            Button(
+                                onClick = {
+                                    viewModel.loadLogsForMaterial(mat)
+                                    // Öffnet später Log‑Dialog
+                                },
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = Color.Black,
+                                    contentColor   = Color.White
+                                ),
+                                shape  = RoundedCornerShape(6.dp),
+                                border = BorderStroke(1.dp, Color.Black),
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(48.dp)
+                            ) {
+                                Text(
+                                    text       = "${index + 1}. SN: ${mat.seriennummer ?: "-"}",
+                                    fontSize   = 15.sp,
+                                    maxLines   = 1,
+                                    overflow   = TextOverflow.Ellipsis
+                                )
+                            }
+                        }
+                    }
+                    Spacer(Modifier.height(12.dp))
+                    Button(
+                        onClick = { selectedBezeichnung = null },
+                        modifier = Modifier.fillMaxWidth()
+                    ) { Text("Schließen") }
+                }
+            }
+        }
+    }
+
+    /* --------------------------------------------------------------
+       Dialog 3 – Logs des selektierten Geräts (wird von ViewModel
+       gesteuert). Dieser Teil entspricht exakt dem bestehenden
+       Log‑Dialog in MaterialCard und wird hier nur eingeblendet,
+       wenn das ViewModel ein selektiertes Material enthält.
+    -------------------------------------------------------------- */
+    if (viewModel.selectedMaterial != null) {
+        Dialog(onDismissRequest = { viewModel.clearSelection() }) {
+            Surface(
+                shape = RoundedCornerShape(12.dp),
+                tonalElevation = 8.dp,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .fillMaxHeight()
+                    .padding(16.dp)
+            ) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Text(
+                        text = "Verlauf – ${viewModel.selectedMaterial?.bezeichnung ?: "?"}",
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 20.sp
+                    )
+                    Spacer(Modifier.height(12.dp))
+                    LazyColumn(
+                        modifier = Modifier
+                            .weight(1f)
+                            .fillMaxWidth(),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        items(viewModel.selectedLogs.asReversed()) { log ->
+                            Text(
+                                text = "${log.timestamp?.format(java.time.format.DateTimeFormatter.ofPattern("dd.MM.yyyy HH:mm"))} – ${log.event}",
+                                fontSize = 14.sp
+                            )
+                        }
+                    }
+                    Spacer(Modifier.height(12.dp))
+                    Button(
+                        onClick = { viewModel.clearSelection() },
+                        modifier = Modifier.fillMaxWidth()
+                    ) { Text("Schließen") }
+                }
+            }
+        }
+    }
+}
+
+/* ------------------------------------------------------------------
    Wiederverwendbares Innenleben
-   horizontalNumbers = true  → Zahlen nebeneinander (Dialog)
-   horizontalNumbers = false → Zahlen untereinander  (Karte)
+   Lagerzahlen jetzt im Header: Bezeichnung links, Zahlen rechts
 ------------------------------------------------------------------- */
 @Composable
 private fun MaterialCardBody(
@@ -100,7 +407,6 @@ private fun MaterialCardBody(
     inLager: Int,
     outOfLager: Int,
     posCounts: List<Pair<String, Int>>,
-    horizontalNumbers: Boolean,
     onPositionClick: (String) -> Unit,
     headerColor: Color,
 
@@ -109,83 +415,55 @@ private fun MaterialCardBody(
 ) {
     Column(modifier = Modifier.fillMaxSize()) {
 
-        /* Header */
-        Box(
+        /* ----------------------------------------------------------
+           Header – Titel links, Lagerzahlen rechts
+        ---------------------------------------------------------- */
+        Row(
             modifier = Modifier
                 .fillMaxWidth()
                 .background(headerColor)
-                .padding(vertical = 4.dp),
-            contentAlignment = Alignment.Center
+                .padding(horizontal = 8.dp, vertical = 4.dp),
+            verticalAlignment = Alignment.CenterVertically
         ) {
             Text(
                 text       = title,
                 color      = Color.White,
                 fontSize   = 20.sp,
                 fontWeight = FontWeight.SemiBold,
-                textAlign  = TextAlign.Center,
                 maxLines   = 1,
-                overflow   = TextOverflow.Ellipsis
+                overflow   = TextOverflow.Ellipsis,
+                modifier   = Modifier.weight(1f)
             )
-        }
 
-        /* ----------------------------------------------------------
-           (1) Lagerzahlen – abhängig von horizontalNumbers
-        ---------------------------------------------------------- */
-        if (horizontalNumbers) {
-            /* ➜ Dialog: Zahlen als eine Zeile, gleichmäßig verteilt  */
             Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(vertical = 6.dp),
-                horizontalArrangement = Arrangement.SpaceEvenly,
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
                 verticalAlignment     = Alignment.CenterVertically
             ) {
-                Lagerzahl(inLager, if (inLager > 0) Color(0xFF4CAF50) else Color.Red)
-                Lagerzahl(outOfLager, Color(0xFF2196F3))
-                Lagerzahl(total,      Color.Black)
+                Lagerzahl(inLager, if (inLager > 0) Color.White else Color.Red)
+                Spacer(Modifier.width(10.dp))
+                //Lagerzahl(outOfLager, Color(0xFF2196F3))
+                //Lagerzahl(total,      Color.White)
             }
         }
 
         /* ----------------------------------------------------------
-           (2) Haupt-Row – enthält Zahlen (falls vertikal) + Buttons
+           Positionsliste
         ---------------------------------------------------------- */
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(10.dp),
-            verticalAlignment = Alignment.Top
-        ) {
-            if (!horizontalNumbers) {
-                /* ➜ Karte: Zahlen untereinander links */
-                Column(
-                    modifier = Modifier.fillMaxHeight(),
-                    verticalArrangement = Arrangement.SpaceEvenly,
-                    horizontalAlignment = Alignment.Start
-                ) {
-                    Lagerzahl(inLager, if (inLager > 0) Color(0xFF4CAF50) else Color.Red)
-                    Lagerzahl(outOfLager, Color(0xFF2196F3))
-                    Lagerzahl(total,      Color.Black)
-                }
-            }
-
-            if (posCounts.isNotEmpty()) {
-                /* Buttons-Liste */
-                if (!horizontalNumbers) Spacer(Modifier.width(8.dp))
-                LazyColumn(
-                    modifier = Modifier
-                        .weight(1f)
-                        .fillMaxHeight()
-                ) {
-                    items(posCounts) { (pos, qty) ->
-                        PositionButton(
-                            pos      = pos,
-                            qty      = qty,
-                            flashing = highlightPositions.contains(pos),
-                            flashOn  = flashOn,
-                            onClick  = { onPositionClick(pos) }
-                        )
-                        Spacer(Modifier.height(4.dp))
-                    }
+        if (posCounts.isNotEmpty()) {
+            LazyColumn(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(10.dp),
+                verticalArrangement = Arrangement.spacedBy(4.dp)
+            ) {
+                items(posCounts) { (pos, qty) ->
+                    PositionButton(
+                        pos      = pos,
+                        qty      = qty,
+                        flashing = highlightPositions.contains(pos),
+                        flashOn  = flashOn,
+                        onClick  = { onPositionClick(pos) }
+                    )
                 }
             }
         }
@@ -318,7 +596,6 @@ fun MaterialCard(
             inLager            = inLager,
             outOfLager         = outOfLager,
             posCounts          = posCounts,
-            horizontalNumbers  = false,
             onPositionClick    = {
                 selectedPosition = it
                 showPositionDialog = true
@@ -347,7 +624,6 @@ fun MaterialCard(
                         inLager            = inLager,
                         outOfLager         = outOfLager,
                         posCounts          = posCounts,
-                        horizontalNumbers  = true,
                         onPositionClick    = {
                             selectedPosition = it
                             showPositionDialog = true
@@ -514,7 +790,6 @@ fun MaterialCard(
 private fun PositionButton(
     pos: String,
     qty: Int,
-    /* --- NEU --- */
     flashing: Boolean = false,
     flashOn: Boolean  = false,
     onClick: () -> Unit
